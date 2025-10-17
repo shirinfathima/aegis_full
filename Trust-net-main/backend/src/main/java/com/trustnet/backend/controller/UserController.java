@@ -13,9 +13,16 @@ public class UserController {
     private UserService userService;
 
     @PostMapping("/register")
-    public String register(@RequestBody User user) {
-        return userService.registerUser(user);
+    public ResponseEntity<?> register(@RequestBody User user) {
+    Object result = userService.registerUser(user);
+    if (result instanceof User) {
+        // Success: return the new User object
+        return ResponseEntity.ok(result);
+    } else {
+        // Failure: return an error message
+        return ResponseEntity.status(400).body(result);
     }
+}
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody User user){ // CHANGE return type to ResponseEntity<?>

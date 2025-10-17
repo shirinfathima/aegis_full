@@ -1,5 +1,4 @@
-// src/pages/IssuerDashboard.js
-import React, { useState, useEffect } from 'react'; // <-- ADD useEffect
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -49,41 +48,21 @@ import {
   Block as BlockIcon,
   CheckCircle as ApproveIcon,
   Cancel as RejectIcon,
-  ExitToApp as LogoutIcon // ADDED Logout Icon
+  ExitToApp as LogoutIcon
 } from '@mui/icons-material';
 import DashboardLayout from '../components/DashboardLayout';
-import { getCurrentUser, logout } from '../services/authService'; // <-- Import authService functions
-import { useNavigate } from 'react-router-dom'; // <-- Import useNavigate
+import { getCurrentUser, logout } from '../services/authService';
+import { useNavigate } from 'react-router-dom';
 
 function IssuerDashboard() {
   const navigate = useNavigate();
+  // ALL HOOKS MOVED TO THE TOP
   const [currentUser] = useState(getCurrentUser());
-  // NEW: Role enforcement logic
-  useEffect(() => {
-    if (!currentUser || currentUser.role.toUpperCase() !== 'ISSUER') {
-      // Redirect unauthorized users
-      if (currentUser && currentUser.role.toUpperCase() === 'VERIFIER') {
-        navigate('/verifier/dashboard');
-      } else if (currentUser && currentUser.role.toUpperCase() === 'USER') {
-        navigate('/user');
-      } else {
-        // Not logged in or unknown role, redirect to home/login page
-        navigate('/');
-      }
-    }
-  }, [currentUser, navigate]);
-
-  if (!currentUser || currentUser.role.toUpperCase() !== 'ISSUER') {
-    // Prevent rendering the dashboard while redirecting
-    return <Box sx={{ p: 4 }}>Checking authorization...</Box>;
-  }
   const [currentTab, setCurrentTab] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedUser, setSelectedUser] = useState(null);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
-
-  // Mock data
   const [users] = useState([
     {
       id: 1,
@@ -130,7 +109,6 @@ function IssuerDashboard() {
       avatar: null
     }
   ]);
-
   const [verifications] = useState([
     {
       id: 1,
@@ -163,7 +141,6 @@ function IssuerDashboard() {
       priority: 'Normal'
     }
   ]);
-
   const [systemStats] = useState({
     totalUsers: 1247,
     activeUsers: 1158,
@@ -172,6 +149,27 @@ function IssuerDashboard() {
     successRate: 94.2,
     averageProcessingTime: '2.3 minutes'
   });
+
+  // Role enforcement logic
+  useEffect(() => {
+    if (!currentUser || currentUser.role.toUpperCase() !== 'ISSUER') {
+      // Redirect unauthorized users
+      if (currentUser && currentUser.role.toUpperCase() === 'VERIFIER') {
+        navigate('/verifier/dashboard');
+      } else if (currentUser && currentUser.role.toUpperCase() === 'USER') {
+        navigate('/user');
+      } else {
+        // Not logged in or unknown role, redirect to home/login page
+        navigate('/');
+      }
+    }
+  }, [currentUser, navigate]);
+
+  // CONDITIONAL RETURN IS NOW AFTER ALL HOOKS
+  if (!currentUser || currentUser.role.toUpperCase() !== 'ISSUER') {
+    // Prevent rendering the dashboard while redirecting
+    return <Box sx={{ p: 4 }}>Checking authorization...</Box>;
+  }
 
   const getStatusColor = (status) => {
     switch (status.toLowerCase()) {

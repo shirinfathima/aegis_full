@@ -47,35 +47,17 @@ import {
   Done as DoneIcon,
   Person as PersonIcon,
   Assessment as AssessmentIcon,
-  ExitToApp as LogoutIcon // ADDED ExitToAppIcon for logout
+  ExitToApp as LogoutIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { getCurrentUser, logout } from '../services/authService'; 
+import { getCurrentUser, logout } from '../services/authService';
 import DashboardLayout from '../components/DashboardLayout';
 
 function VerifierDashboard() {
   const navigate = useNavigate();
+  // ALL HOOKS MOVED TO THE TOP
   const [currentUser] = useState(getCurrentUser());
-  const [currentTab, setCurrentTab] = useState(1); 
-
-  // Role enforcement logic
-  useEffect(() => {
-    if (!currentUser || currentUser.role.toUpperCase() !== 'VERIFIER') {
-      if (currentUser && currentUser.role.toUpperCase() === 'ISSUER') {
-        navigate('/issuer/dashboard');
-      } else if (currentUser && currentUser.role.toUpperCase() === 'USER') {
-        navigate('/user');
-      } else {
-        navigate('/');
-      }
-    }
-  }, [currentUser, navigate]);
-
-  if (!currentUser || currentUser.role.toUpperCase() !== 'VERIFIER') {
-    return <Box sx={{ p: 4 }}>Checking authorization...</Box>;
-  }
-
-  // Mock data (only completed needed for the main dashboard view)
+  const [currentTab, setCurrentTab] = useState(1);
   const [completedVerifications, setCompletedVerifications] = useState([
     {
       id: 4,
@@ -94,15 +76,32 @@ function VerifierDashboard() {
       remarks: 'Document appears to be tampered with'
     }
   ]);
-
-  // Keep stats for display on dashboard
   const [verifierStats] = useState({
     assignedToday: 8,
     completedToday: 5,
-    pendingReview: 3, 
+    pendingReview: 3,
     approvalRate: 87.5,
     avgProcessingTime: '12 minutes'
   });
+
+  // Role enforcement logic
+  useEffect(() => {
+    if (!currentUser || currentUser.role.toUpperCase() !== 'VERIFIER') {
+      if (currentUser && currentUser.role.toUpperCase() === 'ISSUER') {
+        navigate('/issuer/dashboard');
+      } else if (currentUser && currentUser.role.toUpperCase() === 'USER') {
+        navigate('/user');
+      } else {
+        navigate('/');
+      }
+    }
+  }, [currentUser, navigate]);
+
+  // CONDITIONAL RETURN IS NOW AFTER ALL HOOKS
+  if (!currentUser || currentUser.role.toUpperCase() !== 'VERIFIER') {
+    return <Box sx={{ p: 4 }}>Checking authorization...</Box>;
+  }
+
 
   const getStatusColor = (status) => {
     switch (status.toLowerCase()) {
@@ -142,7 +141,6 @@ function VerifierDashboard() {
     </Card>
   );
 
-  // Verifier Sidebar Definition (Profile Details)
   const verifierSidebar = (
     <Box>
       <Card sx={{ mb: 3 }}>
@@ -169,16 +167,15 @@ function VerifierDashboard() {
           </Box>
         </CardContent>
       </Card>
-      {/* NEW: Standalone Logout Card */}
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ textAlign: 'center' }}>
             <List sx={{ width: '100%' }}>
-                <ListItem 
-                    button 
-                    sx={{ py: 0 }} 
-                    onClick={() => { 
-                        logout(); 
-                        navigate('/'); 
+                <ListItem
+                    button
+                    sx={{ py: 0 }}
+                    onClick={() => {
+                        logout();
+                        navigate('/');
                     }}
                 >
                     <ListItemIcon>
@@ -189,8 +186,6 @@ function VerifierDashboard() {
             </List>
         </CardContent>
       </Card>
-      {/* END NEW: Standalone Logout Card */}
-
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>Statistics</Typography>
@@ -214,11 +209,8 @@ function VerifierDashboard() {
     </Box>
   );
 
-
-
   return (
     <DashboardLayout sidebar={verifierSidebar}>
-      {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <VerifierIcon /> Verifier Dashboard
@@ -228,7 +220,6 @@ function VerifierDashboard() {
         </Typography>
       </Box>
 
-      {/* Statistics Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
@@ -264,23 +255,21 @@ function VerifierDashboard() {
         </Grid>
       </Grid>
 
-      {/* Main Content Tabs */}
       <Card>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)}>
-            <Tab 
+            <Tab
               label={
                   <Badge badgeContent={verifierStats.pendingReview} color="error">
                     Review Queue
                   </Badge>
-              } 
+              }
             />
             <Tab label="Completed Verifications" />
             <Tab label="Performance" />
           </Tabs>
         </Box>
 
-        {/* Content for Assigned Verifications/Review Queue - Now a dedicated page link */}
         {currentTab === 0 && (
             <CardContent sx={{ textAlign: 'center', py: 8 }}>
                 <AssessmentIcon sx={{ fontSize: 80, color: 'error.main', mb: 2 }}/>
@@ -301,7 +290,6 @@ function VerifierDashboard() {
             </CardContent>
         )}
 
-        {/* Completed Verifications Tab */}
         {currentTab === 1 && (
           <CardContent>
             <TableContainer component={Paper}>
@@ -324,8 +312,8 @@ function VerifierDashboard() {
                         {new Date(verification.completedDate).toLocaleString()}
                       </TableCell>
                       <TableCell>
-                        <Chip 
-                          label={verification.decision} 
+                        <Chip
+                          label={verification.decision}
                           color={verification.decision === 'Approved' ? 'success' : 'error'}
                           size="small"
                         />
@@ -339,11 +327,10 @@ function VerifierDashboard() {
           </CardContent>
         )}
 
-        {/* Performance Tab */}
         {currentTab === 2 && (
           <CardContent>
             <Typography variant="h6" sx={{ mb: 3 }}>Performance Metrics</Typography>
-            
+
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
                 <Alert severity="success" sx={{ mb: 2 }}>
@@ -364,8 +351,8 @@ function VerifierDashboard() {
               {completedVerifications.slice(0, 5).map((verification) => (
                 <ListItem key={verification.id}>
                   <ListItemIcon>
-                    {verification.decision === 'Approved' ? 
-                      <ApproveIcon color="success" /> : 
+                    {verification.decision === 'Approved' ?
+                      <ApproveIcon color="success" /> :
                       <RejectIcon color="error" />
                     }
                   </ListItemIcon>

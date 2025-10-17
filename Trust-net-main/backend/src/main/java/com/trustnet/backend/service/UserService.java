@@ -14,7 +14,7 @@ public class UserService {
     @Autowired
     private UserRepository userRepo;
 
-    public String registerUser(User user) {
+    public Object registerUser(User user) {
         if (userRepo.existsByEmail(user.getEmail())) {
             return "Email already registered";
         }
@@ -22,8 +22,8 @@ public class UserService {
         if (user.getRole() == null) {
             user.setRole(Role.USER); // default role
         }
-        userRepo.save(user);
-        return "User registered successfully";
+        User savedUser = userRepo.save(user);
+        return savedUser;
     }
     public Object loginUser(User loginData) {
     User user = userRepo.findByEmail(loginData.getEmail());

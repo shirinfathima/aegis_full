@@ -1,12 +1,11 @@
-// src/SignUpModal.js
 import React, { useState } from 'react';
 import {
   Modal, Box, Typography, TextField, Button, Divider, Link,
   FormControl, InputLabel, Select, MenuItem, Alert
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { register } from './services/authService'; // <-- Add this import
-import { useNavigate } from 'react-router-dom'; // <-- Add this import
+import { register } from './services/authService';
+import { useNavigate } from 'react-router-dom';
 
 const StyledModalContent = styled(Box)(({ theme }) => ({
   position: 'absolute',
@@ -35,7 +34,7 @@ function SignUpModal({ open, onClose, onSignInClick }) {
     role: 'user',
   });
   const [submissionMessage, setSubmissionMessage] = useState('');
-  const navigate = useNavigate(); // <-- Add this line
+  const navigate = useNavigate();
 
   const handleSignInRedirect = () => {
     onClose();
@@ -56,14 +55,30 @@ function SignUpModal({ open, onClose, onSignInClick }) {
     }
 
     try {
-      const responseMessage = await register(formData.fullName, formData.email, formData.password, formData.role);
-      setSubmissionMessage(responseMessage);
-      if (responseMessage === 'User registered successfully') {
-        onClose();
-        navigate('/user');
+      // The register function now returns the user object on success
+      const user = await register(formData.fullName, formData.email, formData.password, formData.role);
+      
+      if (user && user.id) {
+        setSubmissionMessage('User registered successfully');
+        onClose(); // Close the modal
+
+        // Redirect to the correct dashboard based on the user's role
+        const role = user.role.toLowerCase();
+        switch(role) {
+          case 'issuer':
+            navigate('/issuer/dashboard');
+            break;
+          case 'verifier':
+            navigate('/verifier/dashboard');
+            break;
+          case 'user':
+          default:
+            navigate('/user');
+        }
       }
     } catch (error) {
-      setSubmissionMessage('Registration failed. Please try again.');
+      // The authService throws an error on failure, which we catch here
+      setSubmissionMessage(error.message || 'Registration failed. Please try again.');
     }
   };
 

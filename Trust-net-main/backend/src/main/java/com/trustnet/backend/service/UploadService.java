@@ -2,15 +2,17 @@ package com.trustnet.backend.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.trustnet.backend.model.UploadResponse;
+import com.trustnet.backend.entity.Document;
+import com.trustnet.backend.model.VerificationStatus;
+import com.trustnet.backend.repository.DocumentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -21,64 +23,85 @@ public class UploadService {
     @Autowired
     private WebClient.Builder webClientBuilder;
 
-    public UploadResponse storeFiles(MultipartFile document, MultipartFile selfie) {
+    @Autowired
+    private DocumentRepository documentRepository;
+
+    public Document processIdCard(MultipartFile frontImage, MultipartFile backImage, Long userId) {
         try {
-            // Extract filenames
-            String docName = Path.of(document.getOriginalFilename()).getFileName().toString();
-            String selfieName = Path.of(selfie.getOriginalFilename()).getFileName().toString();
+            // Save both files locally
+            String frontImageName = Path.of(frontImage.getOriginalFilename()).getFileName().toString();
+            Path frontPath = Paths.get("uploads/docs/" + frontImageName);
+            Files.createDirectories(frontPath.getParent());
+            Files.write(frontPath, frontImage.getBytes(), StandardOpenOption.CREATE);
 
-            // Define paths
-            Path docPath = Paths.get("uploads/docs/" + docName);
-            Path selfiePath = Paths.get("uploads/selfies/" + selfieName);
+            String backImageName = Path.of(backImage.getOriginalFilename()).getFileName().toString();
+            Path backPath = Paths.get("uploads/docs/" + backImageName);
+            Files.write(backPath, backImage.getBytes(), StandardOpenOption.CREATE);
 
-            // Create directories if not present
-            Files.createDirectories(docPath.getParent());
-            Files.createDirectories(selfiePath.getParent());
+            // --- AI WORKFLOW (NEW ORDER) ---
 
-            // Save files locally
-            Files.write(docPath, document.getBytes(), StandardOpenOption.CREATE);
-            Files.write(selfiePath, selfie.getBytes(), StandardOpenOption.CREATE);
+            // 1. Trigger Liveness Check and Face Match FIRST
+            // We pass the front image because it contains the user's photo
+            JsonNode faceMatchResult = triggerLivenessAndFaceMatch(frontPath);
+            double confidence = faceMatchResult.path("confidence").asDouble(0.0);
+            boolean isMatch = faceMatchResult.path("match").asBoolean(false);
 
-            // ✅ Perform face match
-            boolean faceMatch = verifyFaceMatch(docPath, selfiePath);
-            if (!faceMatch) {
-                return new UploadResponse("Face mismatch", docName, selfieName, null);
+            // If faces don't match, you might want to stop the process early
+            if (!isMatch) {
+                 // For now, we will still save the document but you could throw an exception
+                 System.out.println("Face match failed with confidence: " + confidence);
             }
 
-            // ✅ Perform OCR
-            String ocrText = extractTextFromDocument(docPath);
+            // 2. Perform OCR on both sides and merge results
+            String ocrFront = extractTextFromDocument(frontPath, "front");
+            String ocrBack = extractTextFromDocument(backPath, "back");
+            String combinedOcr = "{\"front\":" + ocrFront + ", \"back\":" + ocrBack + "}";
+            
+            // 3. Create and save the Document entity to the database
+            Document document = Document.builder()
+                .userId(userId)
+                .documentName(frontImageName)
+                .selfieName("live_capture.jpg") // The selfie is captured live
+                .ocrData(combinedOcr)
+                .faceMatchConfidence(confidence)
+                .status(VerificationStatus.PENDING)
+                .build();
 
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode root = mapper.readTree(ocrText);
+            return documentRepository.save(document);
 
-            String name = root.path("name").asText(null);
-            String aadhaar = root.path("aadhaar_number").asText(null);
-            String gender = root.path("gender").asText(null);
-            String dob = root.path("dob").asText(null);
-
-            System.out.println("Extracted Fields:");
-            System.out.println("Name: " + name);
-            System.out.println("DOB: " + dob);
-            System.out.println("Gender: " + gender);
-            System.out.println("Aadhaar: " + aadhaar);
-
-            return new UploadResponse("Success", docName, selfieName, ocrText);
-
-        } catch (IOException e) {
+        } catch (IOException | WebClientRequestException e) { // Catch web client exceptions too
             e.printStackTrace();
-            return new UploadResponse("Failure", null, null, null);
+            // You can add more specific error handling here
+            return null;
         }
     }
 
-    // 🔍 OCR Microservice Call
-    public String extractTextFromDocument(Path docPath) throws IOException {
+    private String extractTextFromDocument(Path docPath, String imageSide) throws IOException {
         byte[] fileBytes = Files.readAllBytes(docPath);
-
+        // Calls your OCR service (ensure it's running on port 5000)
         return webClientBuilder.build()
                 .post()
-                .uri("http://localhost:5000/ocr")
+                .uri("http://192.168.38.137:5000/ocr")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData("file", new ByteArrayResource(fileBytes) {
+                    @Override
+                    public String getFilename() {
+                        return imageSide + ".jpg";
+                    }
+                }))
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+    }
+
+    private JsonNode triggerLivenessAndFaceMatch(Path docPath) throws IOException {
+        byte[] fileBytes = Files.readAllBytes(docPath);
+        // Calls your Liveness Check service (ensure it's running on port 5002)
+        String response = webClientBuilder.build()
+                .post()
+                .uri("http://localhost:5002/liveness-check")
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData("document", new ByteArrayResource(fileBytes) {
                     @Override
                     public String getFilename() {
                         return docPath.getFileName().toString();
@@ -86,48 +109,8 @@ public class UploadService {
                 }))
                 .retrieve()
                 .bodyToMono(String.class)
-                .block(); // waits for response
-    }
-
-    // 🧠 Face Match Microservice Call
-    public boolean verifyFaceMatch(Path docPath, Path selfiePath) {
-        try {
-            MultipartBodyBuilder builder = new MultipartBodyBuilder();
-
-            builder.part("document", new ByteArrayResource(Files.readAllBytes(docPath)) {
-                @Override
-                public String getFilename() {
-                    return docPath.getFileName().toString();
-                }
-            }).contentType(MediaType.IMAGE_JPEG);
-
-            builder.part("selfie", new ByteArrayResource(Files.readAllBytes(selfiePath)) {
-                @Override
-                public String getFilename() {
-                    return selfiePath.getFileName().toString();
-                }
-            }).contentType(MediaType.IMAGE_JPEG);
-
-            String response = webClientBuilder.build()
-                    .post()
-                    .uri("http://localhost:5000/face-match")
-                    .contentType(MediaType.MULTIPART_FORM_DATA)
-                    .body(BodyInserters.fromMultipartData(builder.build()))
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
-
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode json = mapper.readTree(response);
-            boolean isMatch = json.has("match") && json.get("match").asBoolean(false);
-            double confidence = json.has("confidence") ? json.get("confidence").asDouble() : 0.0;
-            System.out.println("DeepFace match: " + isMatch + ", confidence: " + confidence);
-
-            return isMatch;
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return false;
-        }
+                .block();
+        
+        return new ObjectMapper().readTree(response);
     }
 }

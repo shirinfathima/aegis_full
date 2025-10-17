@@ -1,5 +1,4 @@
-// src/pages/UserDashboard.js
-import React, { useState, useEffect } from 'react'; // <-- ADD useEffect
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -25,106 +24,103 @@ import {
   Cancel as CancelIcon,
   Schedule as PendingIcon,
   Edit as EditIcon,
-  ExitToApp as LogoutIcon // ADDED Logout Icon
+  ExitToApp as LogoutIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import DashboardLayout from '../components/DashboardLayout'; 
-import { getCurrentUser, logout } from '../services/authService'; 
+import DashboardLayout from '../components/DashboardLayout';
+import { getCurrentUser, logout } from '../services/authService';
 
 function UserDashboard() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(getCurrentUser() || { 
-   name: 'Guest', 
-   email: 'guest@app.com', 
-   role: 'Guest' 
-  });
+  const [user, setUser] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // NEW: Role enforcement logic
   useEffect(() => {
     const currentUser = getCurrentUser();
     if (!currentUser) {
-      // Not logged in, redirect to home/login page
       navigate('/');
       return;
     }
 
     const role = currentUser.role.toUpperCase();
-
     if (role === 'VERIFIER') {
       navigate('/verifier/dashboard');
     } else if (role === 'ISSUER') {
       navigate('/issuer/dashboard');
     } else if (role !== 'USER') {
-      // Fallback for unknown role, redirect to home
       navigate('/');
     }
     
-    // Only update state if the user is actually a USER (to prevent re-render issues from redirects)
-    if (role === 'USER') {
-      setUser(currentUser);
-    }
+    setUser(currentUser);
+    
+    const fetchDocuments = async () => {
+      const storedPassword = sessionStorage.getItem('temp_pass');
+      if (!currentUser || !storedPassword) {
+          setError("Your session has expired. Please log in again.");
+          setIsLoading(false);
+          logout();
+          navigate('/');
+          return;
+      }
+
+      try {
+        const response = await fetch('http://localhost:8080/api/documents/my-documents', {
+          headers: {
+            'Authorization': 'Basic ' + btoa(`${currentUser.email}:${storedPassword}`)
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch documents. Status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setDocuments(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDocuments();
   }, [navigate]);
 
-  if (user.role.toUpperCase() !== 'USER') {
-    // Prevent rendering the dashboard while redirecting
-    return <Box sx={{ p: 4 }}>Checking authorization...</Box>;
+  if (isLoading || !user) {
+    return <Box sx={{ p: 4 }}>Loading Dashboard...</Box>;
   }
-
-  const [documents] = useState([
-    {
-      id: 1,
-      name: 'National ID Card',
-      status: 'Approved',
-      uploadDate: '2024-09-10',
-      confidence: 98
-    },
-    {
-      id: 2,
-      name: 'Passport',
-      status: 'Pending',
-      uploadDate: '2024-09-12',
-      confidence: null
-    },
-    {
-      id: 3,
-      name: 'Driver License',
-      status: 'Rejected',
-      uploadDate: '2024-09-08',
-      confidence: 65
-    }
-  ]);
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Approved': return 'success';
-      case 'Pending': return 'warning';
-      case 'Rejected': return 'error';
+      case 'APPROVED': return 'success';
+      case 'PENDING': return 'warning';
+      case 'REJECTED': return 'error';
       default: return 'default';
     }
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'Approved': return <CheckIcon />;
-      case 'Pending': return <PendingIcon />;
-      case 'Rejected': return <CancelIcon />;
+      case 'APPROVED': return <CheckIcon />;
+      case 'PENDING': return <PendingIcon />;
+      case 'REJECTED': return <CancelIcon />;
       default: return <DocumentIcon />;
     }
   };
 
   const getOverallProgress = () => {
-    const approvedDocs = documents.filter(doc => doc.status === 'Approved').length;
+    if (!documents || documents.length === 0) return 0;
+    const approvedDocs = documents.filter(doc => doc.status === 'APPROVED').length;
     return (approvedDocs / documents.length) * 100;
   };
   
-  // Sidebar component for User Dashboard
   const userSidebar = (
     <Box>
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ textAlign: 'center' }}>
-          <Avatar
-            sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'primary.main' }}
-          >
+          <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'primary.main' }}>
             <PersonIcon sx={{ fontSize: 40 }} />
           </Avatar>
           <Typography variant="h6">{user.name}</Typography>
@@ -144,7 +140,6 @@ function UserDashboard() {
           </Box>
         </CardContent>
       </Card>
-      {/* NEW: Standalone Logout Card */}
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ textAlign: 'center' }}>
             <List sx={{ width: '100%' }}>
@@ -163,7 +158,6 @@ function UserDashboard() {
             </List>
         </CardContent>
       </Card>
-      {/* END NEW: Standalone Logout Card */}
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>Quick Actions</Typography>
@@ -212,7 +206,7 @@ function UserDashboard() {
             />
           </Box>
           <Typography variant="body2" color="text.secondary">
-            {documents.filter(doc => doc.status === 'Approved').length} of {documents.length} documents verified
+            {documents.filter(doc => doc.status === 'APPROVED').length} of {documents.length} documents verified
           </Typography>
         </CardContent>
       </Card>
@@ -220,7 +214,11 @@ function UserDashboard() {
         <CardContent>
           <Typography variant="h6" sx={{ mb: 3 }}>Document Status</Typography>
           
-          {documents.length === 0 ? (
+          {isLoading ? (
+            <LinearProgress />
+          ) : error ? (
+            <Alert severity="error">{error}</Alert>
+          ) : documents.length === 0 ? (
             <Alert severity="info">
               No documents uploaded yet. Start by uploading your first document.
             </Alert>
@@ -234,13 +232,13 @@ function UserDashboard() {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                           {getStatusIcon(document.status)}
                           <Box>
-                            <Typography variant="subtitle1">{document.name}</Typography>
+                            <Typography variant="subtitle1">{document.documentName}</Typography>
                             <Typography variant="body2" color="text.secondary">
-                              Uploaded on {new Date(document.uploadDate).toLocaleDateString()}
+                              Uploaded recently
                             </Typography>
-                            {document.confidence && (
+                            {document.faceMatchConfidence != null && (
                               <Typography variant="body2" color="text.secondary">
-                                Confidence: {document.confidence}%
+                                Confidence: {document.faceMatchConfidence}%
                               </Typography>
                             )}
                           </Box>
@@ -253,7 +251,7 @@ function UserDashboard() {
                             sx={{ mb: 1 }}
                           />
                           <Box>
-                            {document.status === 'Rejected' && (
+                            {document.status === 'REJECTED' && (
                               <Button
                                 size="small"
                                 variant="outlined"
@@ -262,7 +260,7 @@ function UserDashboard() {
                                 Re-upload
                               </Button>
                             )}
-                            {document.status === 'Approved' && (
+                            {document.status === 'APPROVED' && (
                               <Button
                                 size="small"
                                 variant="outlined"
@@ -281,7 +279,6 @@ function UserDashboard() {
             </Grid>
           )}
 
-          {/* Upload New Document Button */}
           <Box sx={{ mt: 3, textAlign: 'center' }}>
             <Button
               variant="contained"
