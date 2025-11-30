@@ -33,4 +33,7 @@ public class Document {
     private Double faceMatchConfidence;
 
     private String ipfsCid; // This will be used later for IPFS integration
+    
+    // NEW FIELD: Stores the symmetric key, encrypted with the user's DID private key
+    private String encryptedDocumentKey;
 }

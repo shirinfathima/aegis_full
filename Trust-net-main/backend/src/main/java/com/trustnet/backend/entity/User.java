@@ -34,6 +34,10 @@ public class User implements UserDetails { // Implement UserDetails
 
     @Enumerated(EnumType.STRING)
     private Role role;
+    
+    // --- Decentralized Identity (DID) fields ---
+    private String did;
+    private String didPrivateKey; // Stores the encrypted private key/seed
 
     // --- UserDetails Methods ---
 
