@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import java.security.*;
 import java.security.spec.ECGenParameterSpec;
 import java.util.Base64;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class UserService {
@@ -24,7 +26,7 @@ public class UserService {
      */
     private String[] generateDidAndKeyPair() {
         try {
-            // 1. Generate an ECC Key Pair
+            // 1. Generate an ECC Key Pair (Elliptic Curve Cryptography)
             KeyPairGenerator keyGen = KeyPairGenerator.getInstance("EC");
             keyGen.initialize(new ECGenParameterSpec("secp256r1"), new SecureRandom());
             KeyPair pair = keyGen.generateKeyPair();
@@ -45,6 +47,16 @@ public class UserService {
         }
     }
 
+    /**
+     * Helper to simulate asymmetric key encryption/storage, avoiding BCrypt length limit.
+     * In a real system, this would use a proper key derivation function (PBKDF2) and AES.
+     * We simulate storage by concatenating and encoding the raw key and password for later retrieval.
+     */
+    private String encryptDidPrivateKey(String privateKeyB64, String password) {
+        // Concatenate key and password (mock decryption token) and Base64 encode for storage
+        return Base64.getEncoder().encodeToString((privateKeyB64 + ":" + password).getBytes());
+    }
+
     public Object registerUser(User user) {
         if (userRepo.existsByEmail(user.getEmail())) {
             return "Email already registered";
@@ -60,16 +72,17 @@ public class UserService {
         String privateKeyB64 = didData[1];
 
         // 2. Encrypt Private Key for secure storage
-        // The plain text private key is encrypted using the password encoder 
-        // (acting as a basic password-derived encryption mechanism for this PoC).
-        String encryptedPrivateKey = passwordEncoder.encode(privateKeyB64);
+        // FIX: Use the custom/mock encryptDidPrivateKey function instead of passwordEncoder.encode()
+        String encryptedPrivateKey = encryptDidPrivateKey(privateKeyB64, plainTextPassword);
 
         // 3. Set DID and Encrypted Key on the User object
         user.setDid(did);
         user.setDidPrivateKey(encryptedPrivateKey);
         // --- END DID/Key Generation and Storage ---
 
-        user.setPassword(passwordEncoder.encode(plainTextPassword)); // Encrypt password for login
+        // 4. Encrypt the *user's short password* for login authentication (This uses BCrypt)
+        user.setPassword(passwordEncoder.encode(plainTextPassword)); 
+        
         if (user.getRole() == null) {
             user.setRole(Role.USER); // default role
         }
@@ -78,16 +91,15 @@ public class UserService {
     }
     
     public Object loginUser(User loginData) {
-    User user = userRepo.findByEmail(loginData.getEmail());
-    if (user == null) {
-        return "User not found";
-    }
+        User user = userRepo.findByEmail(loginData.getEmail());
+        if (user == null) {
+            return "User not found";
+        }
 
-    if (passwordEncoder.matches(loginData.getPassword(), user.getPassword())) {
-        return user;
-    } else {
-        return "Invalid password";
+        if (passwordEncoder.matches(loginData.getPassword(), user.getPassword())) {
+            return user;
+        } else {
+            return "Invalid password";
+        }
     }
-}
-
 }
