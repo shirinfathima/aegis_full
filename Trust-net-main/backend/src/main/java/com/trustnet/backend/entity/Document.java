@@ -34,6 +34,16 @@ public class Document {
 
     private String ipfsCid; // This will be used later for IPFS integration
     
-    // NEW FIELD: Stores the symmetric key, encrypted with the user's DID private key
+    // Stores the symmetric key, encrypted with the user's DID private key
     private String encryptedDocumentKey;
+
+    // To store the generated Verifiable Credential (VC) JSON-LD
+    @Column(columnDefinition = "TEXT") 
+    private String verifiableCredential;
+    
+    // NEW FIELD: To store the hash of the final signed VC for blockchain anchoring
+    private String vcHash;
+
+    // NEW FIELD: To store the blockchain transaction hash for proof of anchoring
+    private String blockchainTransactionHash;
 }

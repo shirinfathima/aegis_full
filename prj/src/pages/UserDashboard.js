@@ -264,9 +264,9 @@ function UserDashboard() {
                               <Button
                                 size="small"
                                 variant="outlined"
-                                onClick={() => navigate('/verification-result')}
+                                onClick={() => navigate('/issued-documents')} // MODIFIED HERE
                               >
-                                View Details
+                                View Credential
                               </Button>
                             )}
                           </Box>
