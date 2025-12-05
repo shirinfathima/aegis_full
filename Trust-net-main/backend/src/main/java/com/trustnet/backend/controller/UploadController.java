@@ -23,11 +23,16 @@ public class UploadController {
             @RequestParam("backImage") MultipartFile backImage,
             @AuthenticationPrincipal User user) {
 
-        Document savedDocument = uploadService.processIdCard(frontImage, backImage, user.getId());
-        
-        if (savedDocument != null) {
-            return ResponseEntity.ok(savedDocument);
-        } else {
+        try {
+            Document savedDocument = uploadService.processIdCard(frontImage, backImage, user.getId());
+            
+            if (savedDocument != null) {
+                return ResponseEntity.ok(savedDocument);
+            } else {
+                return ResponseEntity.status(500).build();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.status(500).build();
         }
     }
