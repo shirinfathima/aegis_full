@@ -73,13 +73,8 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<dependency>
-        	<groupId>org.web3j</groupId>
-        	<artifactId>core</artifactId>
-        	<version>5.0.1</version> 
-   		</dependency>
 	</dependencies>
-    
+
 	<build>
 		<plugins>
 			<plugin>
@@ -105,23 +100,6 @@
 						</exclude>
 					</excludes>
 				</configuration>
-			</plugin>
-			<plugin>
-				<groupId>org.web3j</groupId>
-				<artifactId>web3j-maven-plugin</artifactId>
-				<version>4.14.0</version>
-				<configuration>
-					<inputDir>src/main/resources/solidity</inputDir>
-					<outputDir>src/main/java</outputDir>
-					<packageName>com.trustnet.backend.blockchain</packageName>
-				</configuration>
-				<executions>
-					<execution>
-						<goals>
-							<goal>generate-sources</goal>
-						</goals>
-					</execution>
-				</executions>
 			</plugin>
 		</plugins>
 	</build>

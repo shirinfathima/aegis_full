@@ -1,12 +1,10 @@
-import { getCurrentUser, getStoredPassword } from './authService';
+import { getCurrentUser } from './authService';
 
 const API_URL = 'http://localhost:8080/api';
 
 export const uploadIdCard = async (frontFile, backFile) => {
   const currentUser = getCurrentUser();
-  
-  // FIX: Use the helper function instead of direct sessionStorage access
-  const password = getStoredPassword(); 
+  const password = sessionStorage.getItem('temp_pass');
 
   if (!currentUser || !password) {
     throw new Error('You are not logged in. Please log in again.');

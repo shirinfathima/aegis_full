@@ -31,18 +31,16 @@ function SignUpModal({ open, onClose, onSignInClick }) {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'USER', // <--- Ensure default role is uppercase
+    role: 'user',
   });
   const [submissionMessage, setSubmissionMessage] = useState('');
   const navigate = useNavigate();
 
-  // FIX 1: Add definition for handleSignInRedirect
   const handleSignInRedirect = () => {
     onClose();
     onSignInClick();
   };
 
-  // FIX 2: Add definition for handleInputChange
   const handleInputChange = (field) => (event) => {
     setFormData({
       ...formData,

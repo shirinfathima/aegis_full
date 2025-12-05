@@ -28,7 +28,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
-import { getCurrentUser, logout, getStoredPassword } from '../services/authService';
+import { getCurrentUser, logout } from '../services/authService';
 
 function UserDashboard() {
   const navigate = useNavigate();
@@ -56,8 +56,7 @@ function UserDashboard() {
     setUser(currentUser);
     
     const fetchDocuments = async () => {
-      // FIX: Use getStoredPassword for HTTP Basic Auth
-      const storedPassword = getStoredPassword();
+      const storedPassword = sessionStorage.getItem('temp_pass');
       if (!currentUser || !storedPassword) {
           setError("Your session has expired. Please log in again.");
           setIsLoading(false);
@@ -69,7 +68,6 @@ function UserDashboard() {
       try {
         const response = await fetch('http://localhost:8080/api/documents/my-documents', {
           headers: {
-            // FIX: Use storedPassword
             'Authorization': 'Basic ' + btoa(`${currentUser.email}:${storedPassword}`)
           }
         });
@@ -266,9 +264,9 @@ function UserDashboard() {
                               <Button
                                 size="small"
                                 variant="outlined"
-                                onClick={() => navigate('/issued-documents')} // MODIFIED HERE
+                                onClick={() => navigate('/verification-result')}
                               >
-                                View Credential
+                                View Details
                               </Button>
                             )}
                           </Box>
