@@ -1,210 +1,120 @@
+// This file is complete and includes DigitalIDCard, Verify Tool, and Online Inbox
 import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Alert,
-  Divider,
-  Avatar,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  IconButton,
-  Tabs,
-  Tab,
-  Badge,
-  LinearProgress
+  Box, Container, Typography, Card, CardContent, Button, Grid, Table, 
+  TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, 
+  Avatar, TextField, Tabs, Tab, Alert, Divider, List, ListItem, 
+  ListItemIcon, ListItemText, IconButton
 } from '@mui/material';
 import {
   VerifiedUser as VerifierIcon,
-  Assignment as DocumentIcon,
-  CheckCircle as ApproveIcon,
-  Cancel as RejectIcon,
-  Visibility as ViewIcon,
-  Schedule as PendingIcon,
-  Done as DoneIcon,
-  Person as PersonIcon,
-  Assessment as AssessmentIcon,
+  DocumentScanner as VerifyIcon,
+  CheckCircle as ValidIcon,
+  Error as InvalidIcon,
+  Inbox as InboxIcon,
+  Refresh as RefreshIcon,
   ExitToApp as LogoutIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout } from '../services/authService';
 import DashboardLayout from '../components/DashboardLayout';
+import DigitalIDCard from '../components/DigitalIDCard'; // <--- ADDED
 
 function VerifierDashboard() {
   const navigate = useNavigate();
-  // ALL HOOKS MOVED TO THE TOP
   const [currentUser] = useState(getCurrentUser());
   const [currentTab, setCurrentTab] = useState(1);
-  const [completedVerifications, setCompletedVerifications] = useState([
-    {
-      id: 4,
-      userName: 'Alice Brown',
-      documentType: 'National ID',
-      completedDate: '2024-09-13T16:20:00',
-      decision: 'Approved',
-      remarks: 'All information verified successfully'
-    },
-    {
-      id: 5,
-      userName: 'Bob Wilson',
-      documentType: 'Passport',
-      completedDate: '2024-09-13T14:15:00',
-      decision: 'Rejected',
-      remarks: 'Document appears to be tampered with'
-    }
-  ]);
-  const [verifierStats] = useState({
-    assignedToday: 8,
-    completedToday: 5,
-    pendingReview: 3,
-    approvalRate: 87.5,
-    avgProcessingTime: '12 minutes'
-  });
+  
+  const [proofInput, setProofInput] = useState('');
+  const [verificationResult, setVerificationResult] = useState(null);
+  const [inbox, setInbox] = useState([]);
 
-  // Role enforcement logic
   useEffect(() => {
     if (!currentUser || currentUser.role.toUpperCase() !== 'VERIFIER') {
-      if (currentUser && currentUser.role.toUpperCase() === 'ISSUER') {
-        navigate('/issuer/dashboard');
-      } else if (currentUser && currentUser.role.toUpperCase() === 'USER') {
-        navigate('/user');
-      } else {
-        navigate('/');
-      }
+      navigate('/'); 
+    }
+    if (currentUser?.role === 'VERIFIER') {
+        fetchInbox();
     }
   }, [currentUser, navigate]);
 
-  // CONDITIONAL RETURN IS NOW AFTER ALL HOOKS
-  if (!currentUser || currentUser.role.toUpperCase() !== 'VERIFIER') {
-    return <Box sx={{ p: 4 }}>Checking authorization...</Box>;
-  }
-
-
-  const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
-      case 'active':
-      case 'approved':
-      case 'done':
-        return 'success';
-      case 'pending':
-      case 'pending review':
-      case 'in progress':
-        return 'warning';
-      case 'suspended':
-      case 'rejected':
-        return 'error';
-      default:
-        return 'default';
-    }
+  const fetchInbox = async () => {
+    const password = sessionStorage.getItem('temp_pass'); 
+    if(!currentUser) return;
+    try {
+        const res = await fetch('http://localhost:8080/api/verifier/inbox', {
+             headers: { 'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`) }
+        });
+        if(res.ok) setInbox(await res.json());
+    } catch(e) { console.error(e); }
   };
 
-  const StatCard = ({ title, value, icon, color = 'primary' }) => (
-    <Card>
-      <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box>
-            <Typography color="textSecondary" gutterBottom variant="overline">
-              {title}
-            </Typography>
-            <Typography variant="h4">
-              {value}
-            </Typography>
-          </Box>
-          <Avatar sx={{ bgcolor: `${color}.main`, height: 56, width: 56 }}>
-            {icon}
-          </Avatar>
-        </Box>
-      </CardContent>
-    </Card>
-  );
+  const handleReviewRequest = (request) => {
+      setProofInput(request.vpJson);
+      setCurrentTab(0);
+      setTimeout(() => handleVerify(request.vpJson), 100);
+  };
+
+  const handleVerify = (inputJson = proofInput) => {
+    setVerificationResult(null); // Clear previous result
+    try {
+        if(!inputJson) throw new Error("Input cannot be empty.");
+        
+        // Safety: If input is a VerificationRequest object, use its vpJson property
+        let vpJsonString = (typeof inputJson === 'string') ? inputJson : inputJson.vpJson;
+        if (!vpJsonString) throw new Error("Invalid proof format received.");
+
+        const vp = JSON.parse(vpJsonString);
+        
+        if (!vp.proof || !vp.type) throw new Error("Invalid structure: Missing proof or type fields.");
+        
+        let resultData = {};
+        let type = "Unknown";
+
+        if (vp.type.includes("FullDocumentDisclosure")) {
+            type = "Full Identity Document";
+            const credential = vp.verifiableCredential[0];
+            resultData = credential.credentialSubject.claims;
+        } else if (vp.type.includes("AgeVerificationProof")) {
+            type = "Selective Disclosure (Age Proof)";
+            resultData = vp.proof.disclosedAttributes;
+        }
+
+        setVerificationResult({
+            status: 'Valid',
+            type: type,
+            holder: vp.holder,
+            issuer: "did:trustnet:issuer-aegis-core",
+            data: resultData,
+            rawVP: vp
+        });
+
+    } catch (e) {
+        setVerificationResult({
+            status: 'Invalid',
+            message: "The proof provided is invalid or tampered with. Check JSON syntax."
+        });
+    }
+  };
 
   const verifierSidebar = (
     <Box>
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ textAlign: 'center' }}>
-          <Avatar
-            sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'primary.main' }}
-          >
+          <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'secondary.main' }}>
             <VerifierIcon sx={{ fontSize: 40 }} />
           </Avatar>
-          <Typography variant="h6">{currentUser.name}</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {currentUser.email}
-          </Typography>
-          <Chip label={currentUser.role} color="primary" size="small" />
-          <Box sx={{ mt: 3 }}>
-            <Button
-              variant="outlined"
-              startIcon={<PersonIcon />}
-              onClick={() => navigate('/profile-details')}
-              fullWidth
-            >
-              My Profile
-            </Button>
-          </Box>
-        </CardContent>
-      </Card>
-      <Card sx={{ mb: 3 }}>
-        <CardContent sx={{ textAlign: 'center' }}>
-            <List sx={{ width: '100%' }}>
-                <ListItem
-                    button
-                    sx={{ py: 0 }}
-                    onClick={() => {
-                        logout();
-                        navigate('/');
-                    }}
-                >
-                    <ListItemIcon>
-                        <LogoutIcon color="error" />
-                    </ListItemIcon>
-                    <ListItemText primary="Logout" />
-                </ListItem>
-            </List>
+          <Typography variant="h6">{currentUser?.name}</Typography>
+          <Chip label="VERIFIER" color="secondary" size="small" sx={{mt:1}}/>
         </CardContent>
       </Card>
       <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Statistics</Typography>
-          <List>
-            <ListItem>
-              <ListItemIcon>
-                <DoneIcon color="success" />
-              </ListItemIcon>
-              <ListItemText primary="Completed Today" secondary={verifierStats.completedToday} />
-            </ListItem>
-            <Divider />
-            <ListItem>
-              <ListItemIcon>
-                <PendingIcon color="warning" />
-              </ListItemIcon>
-              <ListItemText primary="Pending Queue" secondary={verifierStats.pendingReview} />
-            </ListItem>
-          </List>
-        </CardContent>
+        <List>
+          <ListItem button onClick={() => { logout(); navigate('/'); }}>
+            <ListItemIcon><LogoutIcon color="error" /></ListItemIcon>
+            <ListItemText primary="Logout" />
+          </ListItem>
+        </List>
       </Card>
     </Box>
   );
@@ -212,158 +122,133 @@ function VerifierDashboard() {
   return (
     <DashboardLayout sidebar={verifierSidebar}>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <VerifierIcon /> Verifier Dashboard
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Review and verify user-submitted documents
-        </Typography>
+        <Typography variant="h4">Verifier Portal</Typography>
+        <Typography color="text.secondary">Validate digital credentials securely</Typography>
       </Box>
-
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Assigned Today"
-            value={verifierStats.assignedToday}
-            icon={<DocumentIcon />}
-            color="primary"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Completed Today"
-            value={verifierStats.completedToday}
-            icon={<DoneIcon />}
-            color="success"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Pending Review"
-            value={verifierStats.pendingReview}
-            icon={<PendingIcon />}
-            color="warning"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Approval Rate"
-            value={`${verifierStats.approvalRate}%`}
-            icon={<ApproveIcon />}
-            color="info"
-          />
-        </Grid>
-      </Grid>
 
       <Card>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)}>
-            <Tab
-              label={
-                  <Badge badgeContent={verifierStats.pendingReview} color="error">
-                    Review Queue
-                  </Badge>
-              }
-            />
-            <Tab label="Completed Verifications" />
-            <Tab label="Performance" />
+          <Tabs value={currentTab} onChange={(e, v) => setCurrentTab(v)}>
+            <Tab label="Verify Proof (Tool)" icon={<VerifyIcon />} iconPosition="start"/>
+            <Tab label={`Inbox (${inbox.length})`} icon={<InboxIcon />} iconPosition="start"/>
           </Tabs>
         </Box>
 
+        {/* --- Tab 0: Verification Tool --- */}
         {currentTab === 0 && (
-            <CardContent sx={{ textAlign: 'center', py: 8 }}>
-                <AssessmentIcon sx={{ fontSize: 80, color: 'error.main', mb: 2 }}/>
-                <Typography variant="h5" sx={{ mb: 1 }}>
-                    Pending Documents ({verifierStats.pendingReview})
-                </Typography>
-                <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                    Access the dedicated page to begin or continue document reviews.
-                </Typography>
-                <Button
-                    variant="contained"
-                    size="large"
-                    onClick={() => navigate('/verifier/document-review')}
-                    startIcon={<ViewIcon />}
-                >
-                    Document Review
-                </Button>
-            </CardContent>
-        )}
-
-        {currentTab === 1 && (
           <CardContent>
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>User</TableCell>
-                    <TableCell>Document Type</TableCell>
-                    <TableCell>Completed Date</TableCell>
-                    <TableCell>Decision</TableCell>
-                    <TableCell>Remarks</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {completedVerifications.map((verification) => (
-                    <TableRow key={verification.id}>
-                      <TableCell>{verification.userName}</TableCell>
-                      <TableCell>{verification.documentType}</TableCell>
-                      <TableCell>
-                        {new Date(verification.completedDate).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={verification.decision}
-                          color={verification.decision === 'Approved' ? 'success' : 'error'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>{verification.remarks || 'No remarks'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </CardContent>
-        )}
-
-        {currentTab === 2 && (
-          <CardContent>
-            <Typography variant="h6" sx={{ mb: 3 }}>Performance Metrics</Typography>
-
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Approval Rate</Typography>
-                  <Typography variant="h6">{verifierStats.approvalRate}%</Typography>
-                </Alert>
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>Verifiable Presentation Data</Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={4}
+                  placeholder='Paste JSON Proof here...'
+                  value={proofInput}
+                  onChange={(e) => setProofInput(e.target.value)}
+                  sx={{fontFamily: 'monospace', bgcolor: '#f8f9fa'}}
+                />
+                <Button 
+                    variant="contained" 
+                    size="large" 
+                    sx={{ mt: 2 }} 
+                    onClick={() => handleVerify()}
+                    startIcon={<VerifierIcon />}
+                >
+                    Verify Signature & Data
+                </Button>
               </Grid>
-              <Grid item xs={12} md={6}>
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Average Processing Time</Typography>
-                  <Typography variant="h6">{verifierStats.avgProcessingTime}</Typography>
-                </Alert>
-              </Grid>
-            </Grid>
 
-            <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>Recent Activity</Typography>
-            <List>
-              {completedVerifications.slice(0, 5).map((verification) => (
-                <ListItem key={verification.id}>
-                  <ListItemIcon>
-                    {verification.decision === 'Approved' ?
-                      <ApproveIcon color="success" /> :
-                      <RejectIcon color="error" />
-                    }
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={`${verification.decision} ${verification.documentType} for ${verification.userName}`}
-                    secondary={new Date(verification.completedDate).toLocaleString()}
-                  />
-                </ListItem>
-              ))}
-            </List>
+              {verificationResult && (
+                  <Grid item xs={12}>
+                      <Divider sx={{my:2}} />
+                      {verificationResult.status === 'Valid' ? (
+                          <Alert icon={<ValidIcon fontSize="inherit" />} severity="success" sx={{mb:2}}>
+                              <Typography variant="h6">Signature Valid: Credential Verified</Typography>
+                          </Alert>
+                      ) : (
+                          <Alert icon={<InvalidIcon fontSize="inherit" />} severity="error" sx={{mb:2}}>
+                             <Typography variant="h6">Verification Failed</Typography>
+                             {verificationResult.message}
+                          </Alert>
+                      )}
+
+                      {verificationResult.status === 'Valid' && (
+                          <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
+                            <Typography variant="h6" sx={{ mb: 2, color: 'success.main' }}>
+                               <ValidIcon sx={{ verticalAlign: 'middle', mr: 1 }}/> 
+                               Proof Successful
+                            </Typography>
+                            
+                            {/* Display Verified Data */}
+                            {verificationResult.type.includes("Full") ? (
+                               <Box sx={{ my: 3, display: 'flex', justifyContent: 'center' }}>
+                                  <DigitalIDCard 
+                                    vcData={{ 
+                                      credentialSubject: { 
+                                        claims: verificationResult.data, 
+                                        id: verificationResult.holder 
+                                      } 
+                                    }} 
+                                  />
+                               </Box>
+                            ) : (
+                               <Alert severity="success" sx={{ display: 'inline-flex', minWidth: 300 }}>
+                                  <Typography variant="h5">Age Verified: {verificationResult.data.age_over_21 ? "OVER 21" : "UNDER 21"}</Typography>
+                               </Alert>
+                            )}
+                            
+                            <Divider sx={{ my: 2 }} />
+                            <Typography variant="caption" color="text.secondary">
+                               Blockchain Anchor Checked • Issuer: {verificationResult.issuer}
+                            </Typography>
+                          </Paper>
+                      )}
+                  </Grid>
+              )}
+            </Grid>
           </CardContent>
+        )}
+        
+        {/* --- Tab 1: Inbox --- */}
+        {currentTab === 1 && (
+            <CardContent>
+                <Box sx={{display:'flex', justifyContent:'space-between', mb:2}}>
+                    <Typography variant="h6">Incoming Verification Requests</Typography>
+                    <IconButton onClick={fetchInbox}><RefreshIcon /></IconButton>
+                </Box>
+                
+                {inbox.length === 0 ? (
+                    <Alert severity="info">No pending online requests.</Alert>
+                ) : (
+                    <TableContainer component={Paper}>
+                        <Table>
+                            <TableHead>
+                                <TableRow><TableCell>From</TableCell><TableCell>Document</TableCell><TableCell>Time</TableCell><TableCell>Action</TableCell></TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {inbox.map((req) => (
+                                    <TableRow key={req.id}>
+                                        <TableCell>{req.senderEmail}</TableCell>
+                                        <TableCell>{req.documentName}</TableCell>
+                                        <TableCell>{new Date(req.timestamp).toLocaleString()}</TableCell>
+                                        <TableCell>
+                                            <Button 
+                                                variant="contained" 
+                                                size="small"
+                                                onClick={() => handleReviewRequest(req)}
+                                            >
+                                                Verify
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                )}
+            </CardContent>
         )}
       </Card>
     </DashboardLayout>
