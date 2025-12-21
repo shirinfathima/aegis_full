@@ -6,26 +6,12 @@
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
 		<version>3.5.3</version>
-		<relativePath/> <!-- lookup parent from repository -->
-	</parent>
+		<relativePath/> </parent>
 	<groupId>com.trustnet</groupId>
 	<artifactId>backend</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>backend</name>
 	<description>TrustNet Backend Microservice</description>
-	<url/>
-	<licenses>
-		<license/>
-	</licenses>
-	<developers>
-		<developer/>
-	</developers>
-	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
-	</scm>
 	<properties>
 		<java.version>21</java.version>
 	</properties>
@@ -38,7 +24,6 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
-
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-devtools</artifactId>
@@ -46,14 +31,12 @@
 			<optional>true</optional>
 		</dependency>
 		<dependency>
-    	<groupId>org.springframework.boot</groupId>
-    	<artifactId>spring-boot-starter-json</artifactId>
-	</dependency>
-
-	<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-webflux</artifactId> <!-- for WebClient -->
-	</dependency>
+    	    <groupId>org.springframework.boot</groupId>
+    	    <artifactId>spring-boot-starter-json</artifactId>
+	    </dependency>
+	    <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId> </dependency>
 		<dependency>
     		<groupId>org.postgresql</groupId>
     		<artifactId>postgresql</artifactId>
@@ -73,11 +56,18 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<dependency>
+        
+        <dependency>
         	<groupId>org.web3j</groupId>
         	<artifactId>core</artifactId>
         	<version>5.0.1</version> 
    		</dependency>
+
+        <dependency>
+            <groupId>org.bitcoinj</groupId>
+            <artifactId>bitcoinj-core</artifactId>
+            <version>0.16.2</version>
+        </dependency>
 	</dependencies>
     
 	<build>
@@ -106,13 +96,19 @@
 					</excludes>
 				</configuration>
 			</plugin>
-			<plugin>
+            
+            <plugin>
 				<groupId>org.web3j</groupId>
 				<artifactId>web3j-maven-plugin</artifactId>
 				<version>4.14.0</version>
 				<configuration>
-					<inputDir>src/main/resources/solidity</inputDir>
-					<outputDir>src/main/java</outputDir>
+                    <soliditySourceFiles>
+                        <directory>src/main/resources/solidity</directory>
+                        <includes>
+                            <include>**/*.sol</include>
+                        </includes>
+                    </soliditySourceFiles>
+					<sourceDestination>src/main/java</sourceDestination>
 					<packageName>com.trustnet.backend.blockchain</packageName>
 				</configuration>
 				<executions>
@@ -125,5 +121,4 @@
 			</plugin>
 		</plugins>
 	</build>
-
 </project>

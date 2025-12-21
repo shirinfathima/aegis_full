@@ -10,8 +10,6 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 
-import java.security.MessageDigest;
-import java.util.Base64;
 import java.util.List;
 
 @Service
@@ -29,15 +27,7 @@ public class IssuerService {
     @Autowired
     private BlockchainService blockchainService;
 
-    private String sha256Hash(String data) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(data.getBytes("UTF-8"));
-            return Base64.getEncoder().encodeToString(hash);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to calculate SHA-256 hash.", e);
-        }
-    }
+    // NOTE: Removed sha256Hash helper method as it is no longer needed for ZKP anchoring.
 
     public List<Document> getPendingDocuments() {
         return documentRepository.findByStatus(VerificationStatus.PENDING);
@@ -61,17 +51,21 @@ public class IssuerService {
                 throw new RuntimeException("Failed to generate VC due to invalid document OCR data.", e);
             }
 
-            // 3. Calculate VC Hash for Anchoring (Step 5, Requirement 2)
-            String vcHash = sha256Hash(verifiableCredential);
-            document.setVcHash(vcHash);
+            // 3. Retrieve the ZK-Friendly Hash (Commitment) stored during Upload
+            // This 'vcHash' field was populated in UploadService with the Poseidon Hash of the IPFS CID.
+            String zkCommitment = document.getVcHash();
+
+            if (zkCommitment == null || zkCommitment.isEmpty()) {
+                throw new RuntimeException("Cannot anchor document: ZK Commitment (vcHash) is missing.");
+            }
             
-            // 4. ANCHOR THE PROOF TO THE BLOCKCHAIN (Step 5, Requirement 3 & 4)
+            // 4. ANCHOR THE PROOF TO THE BLOCKCHAIN
             try {
-                // Anchoring the VC Hash to the blockchain 
-                // (Using DID as the identifier in the smart contract)
-                TransactionReceipt receipt = blockchainService.anchorDocumentCID(document.getUserId(), vcHash);
+                // Pass the numeric Poseidon hash string directly to the blockchain service
+                // The service will convert this String -> BigInteger -> uint256
+                TransactionReceipt receipt = blockchainService.anchorDocumentCID(document.getUserId(), zkCommitment);
                 
-                // Update Document entity with the Transaction Hash (Step 5, Requirement 4)
+                // Update Document entity with the Transaction Hash
                 document.setBlockchainTransactionHash(receipt.getTransactionHash());
                 
                 System.out.println("✅ Blockchain Anchoring Successful. Tx Hash: " + receipt.getTransactionHash());

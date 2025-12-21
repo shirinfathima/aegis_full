@@ -1,7 +1,7 @@
 package com.trustnet.backend.service;
 
 import com.trustnet.backend.blockchain.DocumentAnchor;
-import org.springframework.beans.factory.annotation.Value; // Import for property injection
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.web3j.crypto.Credentials;
@@ -21,26 +21,20 @@ public class BlockchainService {
     private final Credentials credentials;
     private final DocumentAnchor deployedContract;
 
-    // FIX: Inject privateKey using a fallback to the AMOY_PRIVATE_KEY environment variable.
     public BlockchainService(
         @Autowired Web3j web3j,
-        // The property value now checks 1. amoy.private.key system prop, 
-        // then 2. AMOY_PRIVATE_KEY environment variable, then 3. empty string.
         @Value("${amoy.private.key:${AMOY_PRIVATE_KEY:}}") String privateKey
     ) throws Exception {
         this.web3j = web3j;
         
-        // 1. Safely Check and Clean the Injected Key
-        // The exception now ensures the key value was successfully loaded
         if (privateKey == null || privateKey.isEmpty() || privateKey.length() < 64) {
             throw new Exception("AMOY_PRIVATE_KEY property value is missing or invalid. Check the -Damoy.private.key argument.");
         }
         
-        // Remove optional "0x" prefix and load credentials
         String cleanedKey = privateKey.startsWith("0x") ? privateKey.substring(2) : privateKey;
         this.credentials = Credentials.create(cleanedKey);
         
-        // 2. Load the contract using the generated wrapper
+        // Load the contract using the regenerated wrapper
         this.deployedContract = DocumentAnchor.load(
             CONTRACT_ADDRESS, 
             web3j, 
@@ -50,18 +44,29 @@ public class BlockchainService {
     }
     
     /**
-     * Anchors a document's IPFS CID to a user ID on the blockchain (Transaction).
+     * Anchors a document's IPFS CID Hash to a user ID on the blockchain (Transaction).
+     * Now accepts a numeric hash string and converts it to BigInteger for ZKP compatibility.
      */
-    public TransactionReceipt anchorDocumentCID(Long userId, String ipfsCid) throws Exception {
+    public TransactionReceipt anchorDocumentCID(Long userId, String cidHash) throws Exception {
         BigInteger solUserId = BigInteger.valueOf(userId);
-        return deployedContract.storeDocumentCID(solUserId, ipfsCid).send();
+        
+        // Convert the Poseidon hash string from the database back to a BigInteger for the smart contract
+        BigInteger numericHash = new BigInteger(cidHash);
+        
+        // The storeDocumentCID method now requires a BigInteger in the regenerated wrapper
+        return deployedContract.storeDocumentCID(solUserId, numericHash).send();
     }
 
     /**
-     * Retrieves the latest anchored IPFS CID for a user (View Call).
+     * Retrieves the latest anchored IPFS CID Hash for a user (View Call).
+     * Returns the numeric hash as a string for use in the backend/frontend.
      */
     public String getAnchoredCID(Long userId) throws Exception {
         BigInteger solUserId = BigInteger.valueOf(userId);
-        return deployedContract.getDocumentCID(solUserId).send();
+        
+        // The contract call now returns a BigInteger (uint256)
+        BigInteger result = deployedContract.getDocumentCID(solUserId).send();
+        
+        return result.toString();
     }
 }
