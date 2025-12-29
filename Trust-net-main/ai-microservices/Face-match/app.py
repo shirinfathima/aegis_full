@@ -36,7 +36,6 @@ def face_match():
         threshold = 0.55  # Customize this based on your model; Facenet512 default is ~0.3–0.4
         match = distance < threshold
         confidence = round((1 - distance) * 100, 2)
-
         response = {
             "match": match,
             "confidence": confidence,
