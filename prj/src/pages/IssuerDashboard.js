@@ -1,602 +1,363 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Chip,
-  Avatar,
-  TextField,
-  InputAdornment,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  Alert,
-  Tabs,
-  Tab,
-  IconButton
+  Box, Typography, Card, CardContent, Button, Grid, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Paper, Chip, Avatar,
+  Tabs, Tab, Alert, List, ListItem, ListItemIcon, ListItemText, Divider,
+  Stack, LinearProgress, CircularProgress
 } from '@mui/material';
 import {
   AdminPanelSettings as IssuerIcon,
-  People as UsersIcon,
-  Assignment as TaskIcon,
-  Assessment as ReportsIcon,
-  Search as SearchIcon,
-  Download as DownloadIcon,
-  Visibility as ViewIcon,
-  Edit as EditIcon,
-  Block as BlockIcon,
   CheckCircle as ApproveIcon,
   Cancel as RejectIcon,
-  ExitToApp as LogoutIcon
+  ExitToApp as LogoutIcon,
+  Assignment as DocIcon,
+  Warning as FraudIcon,
+  Dashboard as DashboardIcon,
+  AccessTime as PendingIcon,
+  CheckCircleOutline as CheckCircleOutlineIcon
 } from '@mui/icons-material';
 import DashboardLayout from '../components/DashboardLayout';
-import { getCurrentUser, logout } from '../services/authService';
+import { getCurrentUser, logout, getStoredPassword } from '../services/authService';
 import { useNavigate } from 'react-router-dom';
 
 function IssuerDashboard() {
   const navigate = useNavigate();
-  // ALL HOOKS MOVED TO THE TOP
   const [currentUser] = useState(getCurrentUser());
-  const [currentTab, setCurrentTab] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [userDialogOpen, setUserDialogOpen] = useState(false);
-  const [users] = useState([
-    {
-      id: 1,
-      name: 'John Doe',
-      email: 'john@email.com',
-      role: 'User',
-      status: 'Active',
-      joinDate: '2024-09-01',
-      verificationStatus: 'Approved',
-      documentsCount: 3,
-      avatar: null
-    },
-    {
-      id: 2,
-      name: 'Jane Smith',
-      email: 'jane@email.com',
-      role: 'Verifier',
-      status: 'Active',
-      joinDate: '2024-08-15',
-      verificationStatus: 'Pending',
-      documentsCount: 1,
-      avatar: null
-    },
-    {
-      id: 3,
-      name: 'Bob Johnson',
-      email: 'bob@email.com',
-      role: 'User',
-      status: 'Suspended',
-      joinDate: '2024-07-20',
-      verificationStatus: 'Rejected',
-      documentsCount: 2,
-      avatar: null
-    },
-    {
-      id: 4,
-      name: 'Alice Brown',
-      email: 'alice@email.com',
-      role: 'User',
-      status: 'Active',
-      joinDate: '2024-09-10',
-      verificationStatus: 'Approved',
-      documentsCount: 2,
-      avatar: null
-    }
-  ]);
-  const [verifications] = useState([
-    {
-      id: 1,
-      userId: 1,
-      userName: 'John Doe',
-      documentType: 'National ID',
-      submittedDate: '2024-09-14',
-      status: 'Pending Review',
-      assignedTo: 'Jane Smith',
-      priority: 'Normal'
-    },
-    {
-      id: 2,
-      userId: 4,
-      userName: 'Alice Brown',
-      documentType: 'Passport',
-      submittedDate: '2024-09-13',
-      status: 'In Progress',
-      assignedTo: 'Jane Smith',
-      priority: 'High'
-    },
-    {
-      id: 3,
-      userId: 3,
-      userName: 'Bob Johnson',
-      documentType: 'Driver License',
-      submittedDate: '2024-09-12',
-      status: 'Rejected',
-      assignedTo: 'System',
-      priority: 'Normal'
-    }
-  ]);
-  const [systemStats] = useState({
-    totalUsers: 1247,
-    activeUsers: 1158,
-    pendingVerifications: 23,
-    completedToday: 67,
-    successRate: 94.2,
-    averageProcessingTime: '2.3 minutes'
+  const [currentTab, setCurrentTab] = useState(1); // Default to Verification Queue
+  const [pendingDocs, setPendingDocs] = useState([]);
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [stats, setStats] = useState({
+    totalIssued: 1240, // Mock data for display
+    fraudDetected: 12, // Mock data for display
+    avgProcessingTime: '45s'
   });
 
-  // Role enforcement logic
-  useEffect(() => {
-    if (!currentUser || currentUser.role.toUpperCase() !== 'ISSUER') {
-      // Redirect unauthorized users
-      if (currentUser && currentUser.role.toUpperCase() === 'VERIFIER') {
-        navigate('/verifier/dashboard');
-      } else if (currentUser && currentUser.role.toUpperCase() === 'USER') {
-        navigate('/user');
-      } else {
-        // Not logged in or unknown role, redirect to home/login page
-        navigate('/');
+  // 1. Fetch Real Pending Documents
+  // Wrapped in useCallback to satisfy useEffect dependencies
+  const fetchPendingDocuments = useCallback(async () => {
+    const password = getStoredPassword();
+    if (!currentUser || !password) return;
+
+    try {
+      const response = await fetch('http://localhost:8080/api/issuer/documents/pending', {
+        headers: {
+          'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`)
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPendingDocs(data);
       }
+    } catch (err) {
+      console.error("Error fetching pending docs:", err);
     }
-  }, [currentUser, navigate]);
+  }, [currentUser]);
 
-  // CONDITIONAL RETURN IS NOW AFTER ALL HOOKS
-  if (!currentUser || currentUser.role.toUpperCase() !== 'ISSUER') {
-    // Prevent rendering the dashboard while redirecting
-    return <Box sx={{ p: 4 }}>Checking authorization...</Box>;
-  }
-
-  const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
-      case 'active':
-      case 'approved':
-        return 'success';
-      case 'pending':
-      case 'pending review':
-      case 'in progress':
-        return 'warning';
-      case 'suspended':
-      case 'rejected':
-        return 'error';
-      default:
-        return 'default';
+  useEffect(() => {
+    if (currentUser?.role.toUpperCase() === 'ISSUER') {
+      fetchPendingDocuments();
     }
-  };
+  }, [currentUser, fetchPendingDocuments]);
 
-  const getPriorityColor = (priority) => {
-    switch (priority.toLowerCase()) {
-      case 'high':
-        return 'error';
-      case 'normal':
-        return 'primary';
-      case 'low':
-        return 'default';
-      default:
-        return 'default';
+  // 2. Handle Approval Action
+  const handleApprove = async (docId) => {
+    const password = getStoredPassword();
+    setError('');
+    setSuccessMsg('');
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/issuer/documents/${docId}/approve`, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`)
+        }
+      });
+
+      if (!response.ok) throw new Error("Approval failed");
+
+      setSuccessMsg(`Document ${docId} Approved & Anchored to Blockchain!`);
+      // Update local stats mock
+      setStats(prev => ({ ...prev, totalIssued: prev.totalIssued + 1 }));
+      fetchPendingDocuments(); // Refresh list
+    } catch (err) {
+      setError(err.message);
     }
   };
 
-  const handleUserClick = (user) => {
-    setSelectedUser(user);
-    setUserDialogOpen(true);
+  // 3. Handle Reject Action
+  const handleReject = async (docId) => {
+    const password = getStoredPassword();
+    try {
+      await fetch(`http://localhost:8080/api/issuer/documents/${docId}/reject`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`) }
+      });
+      fetchPendingDocuments();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const handleExportUsers = () => {
-    // Mock export functionality
-    const csvData = users.map(user =>
-      `${user.name},${user.email},${user.role},${user.status},${user.joinDate}`
-    ).join('\n');
+  // --- Render Helpers ---
 
-    const blob = new Blob([`Name,Email,Role,Status,Join Date\n${csvData}`], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'users_report.csv';
-    a.click();
-  };
-
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || user.status.toLowerCase() === statusFilter.toLowerCase();
-    return matchesSearch && matchesStatus;
-  });
-
-  const StatCard = ({ title, value, icon, color = 'primary' }) => (
-    <Card>
+  const StatCard = ({ title, value, icon, color }) => (
+    <Card sx={{ height: '100%' }}>
       <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box>
-            <Typography color="textSecondary" gutterBottom variant="overline">
-              {title}
-            </Typography>
-            <Typography variant="h4">
-              {value}
-            </Typography>
-          </Box>
-          <Avatar sx={{ bgcolor: `${color}.main`, height: 56, width: 56 }}>
+        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+          <Avatar sx={{ bgcolor: `${color}.light`, color: `${color}.main` }}>
             {icon}
           </Avatar>
-        </Box>
+          <Typography variant="h6" color="text.secondary">{title}</Typography>
+        </Stack>
+        <Typography variant="h4" fontWeight="bold">{value}</Typography>
       </CardContent>
     </Card>
   );
 
+  // Helper component for badge icon
+  const AssignmentIconWithBadge = ({ count }) => (
+    <Box sx={{ position: 'relative', display: 'flex' }}>
+      <DocIcon />
+      {count > 0 && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: -4,
+            right: -4,
+            bgcolor: 'error.main',
+            color: 'white',
+            borderRadius: '50%',
+            width: 16,
+            height: 16,
+            fontSize: 10,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          {count}
+        </Box>
+      )}
+    </Box>
+  );
+
   const issuerSidebar = (
     <Box>
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 3, boxShadow: 3 }}>
         <CardContent sx={{ textAlign: 'center' }}>
-          <Avatar
-            sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'primary.main' }}
-          >
+          <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'primary.main', boxShadow: 2 }}>
             <IssuerIcon sx={{ fontSize: 40 }} />
           </Avatar>
-          <Typography variant="h6">{currentUser.name}</Typography> 
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {currentUser.email}
-          </Typography>
+          <Typography variant="h6" fontWeight="bold">{currentUser?.name}</Typography>
+          <Chip label="ISSUER AUTHORITY" color="primary" size="small" sx={{ mt: 1 }} />
         </CardContent>
       </Card>
-      {/* NEW: Standalone Logout Card */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent sx={{ textAlign: 'center' }}>
-            <List sx={{ width: '100%' }}>
-                <ListItem 
-                    button 
-                    onClick={() => { 
-                        logout(); 
-                        navigate('/'); 
-                    }}
-                >
-                    <ListItemIcon>
-                        <LogoutIcon color="error" />
-                    </ListItemIcon>
-                    <ListItemText primary="Logout" />
-                </ListItem>
-            </List>
-        </CardContent>
-      </Card>
-      {/* END NEW: Standalone Logout Card */}
-      <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>System Overview</Typography>
-          <StatCard
-            title="Total Users"
-            value={systemStats.totalUsers}
-            icon={<UsersIcon />}
-            color="primary"
-          />
-          <Box sx={{ my: 2 }}>
-            <StatCard
-              title="Active Users"
-              value={systemStats.activeUsers}
-              icon={<UsersIcon />}
-              color="success"
-            />
-          </Box>
-          <StatCard
-            title="Pending Verifications"
-            value={systemStats.pendingVerifications}
-            icon={<TaskIcon />}
-            color="warning"
-          />
-        </CardContent>
-      </Card>
+      <Paper elevation={2}>
+        <List component="nav">
+          <ListItem button selected={currentTab === 0} onClick={() => setCurrentTab(0)}>
+            <ListItemIcon><DashboardIcon color={currentTab === 0 ? "primary" : "inherit"} /></ListItemIcon>
+            <ListItemText primary="Overview" />
+          </ListItem>
+          <ListItem button selected={currentTab === 1} onClick={() => setCurrentTab(1)}>
+            <ListItemIcon><AssignmentIconWithBadge count={pendingDocs.length} /></ListItemIcon>
+            <ListItemText primary="Verification Queue" />
+          </ListItem>
+          <Divider />
+          <ListItem button onClick={() => navigate('/issuer/issued-docs')}>
+            <ListItemIcon><DocIcon /></ListItemIcon>
+            <ListItemText primary="Issued Documents" />
+          </ListItem>
+          <ListItem button onClick={() => navigate('/issuer/fraud-detection')}>
+            <ListItemIcon><FraudIcon color="warning" /></ListItemIcon>
+            <ListItemText primary="Fraud Detection" />
+          </ListItem>
+          <Divider sx={{ my: 1 }} />
+          <ListItem button onClick={() => { logout(); navigate('/'); }}>
+            <ListItemIcon><LogoutIcon color="error" /></ListItemIcon>
+            <ListItemText primary="Logout" />
+          </ListItem>
+        </List>
+      </Paper>
     </Box>
   );
 
   return (
     <DashboardLayout sidebar={issuerSidebar}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <IssuerIcon /> Issuer Dashboard
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Manage users, monitor verifications, and generate reports
-        </Typography>
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box>
+          <Typography variant="h4" fontWeight="bold" gutterBottom>Issuer Dashboard</Typography>
+          <Typography color="text.secondary">Manage identity verifications and credential issuance</Typography>
+        </Box>
+        <Box>
+           <Chip 
+             icon={<PendingIcon />} 
+             label={`${pendingDocs.length} Pending Actions`} 
+             color="warning" 
+             variant="outlined" 
+           />
+        </Box>
       </Box>
 
-      {/* Main Content Tabs */}
-      <Card>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)}>
-            <Tab label="User Management" />
-            <Tab label="Verification Queue" />
-            <Tab label="System Reports" />
-          </Tabs>
-        </Box>
+      {successMsg && <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccessMsg('')}>{successMsg}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>{error}</Alert>}
 
-        {/* User Management Tab */}
-        {currentTab === 0 && (
-          <CardContent>
-            {/* Search and Filter Controls */}
-            <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-              <TextField
-                placeholder="Search users..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon />
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{ minWidth: 250 }}
-              />
-              <FormControl sx={{ minWidth: 150 }}>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  label="Status"
-                >
-                  <MenuItem value="all">All Status</MenuItem>
-                  <MenuItem value="active">Active</MenuItem>
-                  <MenuItem value="suspended">Suspended</MenuItem>
-                </Select>
-              </FormControl>
-              <Button
-                variant="outlined"
-                startIcon={<DownloadIcon />}
-                onClick={handleExportUsers}
-              >
-                Export CSV
-              </Button>
-            </Box>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs value={currentTab} onChange={(e, v) => setCurrentTab(v)} textColor="primary" indicatorColor="primary">
+          <Tab label="System Overview" />
+          <Tab label={`Verification Queue (${pendingDocs.length})`} />
+        </Tabs>
+      </Box>
 
-            {/* Users Table */}
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>User</TableCell>
-                    <TableCell>Role</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Verification Status</TableCell>
-                    <TableCell>Documents</TableCell>
-                    <TableCell>Join Date</TableCell>
-                    <TableCell>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredUsers.map((user) => (
-                    <TableRow key={user.id} hover>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Avatar>{user.name.charAt(0)}</Avatar>
-                          <Box>
-                            <Typography variant="subtitle2">{user.name}</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {user.email}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Chip label={user.role} variant="outlined" size="small" />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={user.status}
-                          color={getStatusColor(user.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={user.verificationStatus}
-                          color={getStatusColor(user.verificationStatus)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>{user.documentsCount}</TableCell>
-                      <TableCell>{new Date(user.joinDate).toLocaleDateString()}</TableCell>
-                      <TableCell>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleUserClick(user)}
-                        >
-                          <ViewIcon />
-                        </IconButton>
-                        <IconButton size="small">
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton size="small" color="error">
-                          <BlockIcon />
-                        </IconButton>
-                      </TableCell>
+      {/* Overview Tab */}
+      {currentTab === 0 && (
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={4}>
+            <StatCard 
+              title="Pending Review" 
+              value={pendingDocs.length} 
+              icon={<PendingIcon />} 
+              color="warning" 
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <StatCard 
+              title="Total Issued" 
+              value={stats.totalIssued} 
+              icon={<DocIcon />} 
+              color="success" 
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <StatCard 
+              title="Fraud Alerts" 
+              value={stats.fraudDetected} 
+              icon={<FraudIcon />} 
+              color="error" 
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <Card sx={{ mt: 2 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>System Health</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                  <Typography variant="body2" sx={{ minWidth: 150 }}>Blockchain Node</Typography>
+                  <LinearProgress variant="determinate" value={100} color="success" sx={{ flexGrow: 1, height: 8, borderRadius: 5 }} />
+                  <Typography variant="body2" sx={{ ml: 2 }}>Online</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Typography variant="body2" sx={{ minWidth: 150 }}>AI Match Engine</Typography>
+                  <LinearProgress variant="determinate" value={95} color="primary" sx={{ flexGrow: 1, height: 8, borderRadius: 5 }} />
+                  <Typography variant="body2" sx={{ ml: 2 }}>Active</Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      )}
+
+      {/* Verification Queue Tab */}
+      {currentTab === 1 && (
+        <Card sx={{ boxShadow: 3 }}>
+          <CardContent sx={{ p: 0 }}>
+            {pendingDocs.length === 0 ? (
+              <Box sx={{ py: 8, textAlign: 'center' }}>
+                <CheckCircleOutlineIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+                <Typography variant="h6" color="text.secondary">All Caught Up!</Typography>
+                <Typography variant="body2" color="text.disabled">No pending documents to verify.</Typography>
+              </Box>
+            ) : (
+              <TableContainer>
+                <Table sx={{ minWidth: 650 }}>
+                  <TableHead sx={{ bgcolor: 'grey.100' }}>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Request ID</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>User ID</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Document Type</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>AI Match Score</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {pendingDocs.map((doc) => (
+                      <TableRow key={doc.id} hover>
+                        <TableCell>#{doc.id}</TableCell>
+                        <TableCell>
+                          <Stack direction="row" alignItems="center" spacing={1}>
+                            <Avatar sx={{ width: 24, height: 24, fontSize: 12 }}>{doc.userId.toString().substring(0,1)}</Avatar>
+                            <Typography variant="body2">{doc.userId}</Typography>
+                          </Stack>
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={doc.documentName} size="small" variant="outlined" />
+                        </TableCell>
+                        <TableCell>
+                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                             <CircularProgressWithLabel value={doc.faceMatchConfidence || 0} />
+                           </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Chip label="Pending Review" color="warning" size="small" />
+                        </TableCell>
+                        <TableCell align="center">
+                          <Stack direction="row" spacing={1} justifyContent="center">
+                            <Button 
+                              variant="contained" 
+                              color="success" 
+                              size="small" 
+                              startIcon={<ApproveIcon />}
+                              onClick={() => handleApprove(doc.id)}
+                            >
+                              Approve
+                            </Button>
+                            <Button 
+                              variant="outlined" 
+                              color="error" 
+                              size="small" 
+                              startIcon={<RejectIcon />}
+                              onClick={() => handleReject(doc.id)}
+                            >
+                              Reject
+                            </Button>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
           </CardContent>
-        )}
-
-        {/* Verification Queue Tab */}
-        {currentTab === 1 && (
-          <CardContent>
-            <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-              <Typography variant="h6">Pending Verifications</Typography>
-              <Chip label={`${verifications.length} items`} color="primary" />
-            </Box>
-
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>User</TableCell>
-                    <TableCell>Document Type</TableCell>
-                    <TableCell>Submitted</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Priority</TableCell>
-                    <TableCell>Assigned To</TableCell>
-                    <TableCell>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {verifications.map((verification) => (
-                    <TableRow key={verification.id} hover>
-                      <TableCell>
-                        <Typography variant="subtitle2">
-                          {verification.userName}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{verification.documentType}</TableCell>
-                      <TableCell>
-                        {new Date(verification.submittedDate).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={verification.status}
-                          color={getStatusColor(verification.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={verification.priority}
-                          color={getPriorityColor(verification.priority)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>{verification.assignedTo}</TableCell>
-                      <TableCell>
-                        <IconButton size="small" color="success">
-                          <ApproveIcon />
-                        </IconButton>
-                        <IconButton size="small" color="error">
-                          <RejectIcon />
-                        </IconButton>
-                        <IconButton size="small">
-                          <ViewIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </CardContent>
-        )}
-
-        {/* System Reports Tab */}
-        {currentTab === 2 && (
-          <CardContent>
-            <Typography variant="h6" sx={{ mb: 3 }}>System Performance</Typography>
-
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Success Rate</Typography>
-                  <Typography variant="h6">{systemStats.successRate}%</Typography>
-                </Alert>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">Avg. Processing Time</Typography>
-                  <Typography variant="h6">{systemStats.averageProcessingTime}</Typography>
-                </Alert>
-              </Grid>
-            </Grid>
-
-            <Box sx={{ mt: 4 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>Generate Reports</Typography>
-              <Grid container spacing={2}>
-                <Grid item>
-                  <Button variant="outlined" startIcon={<DownloadIcon />}>
-                    User Activity Report
-                  </Button>
-                </Grid>
-                <Grid item>
-                  <Button variant="outlined" startIcon={<DownloadIcon />}>
-                    Verification Statistics
-                  </Button>
-                </Grid>
-                <Grid item>
-                  <Button variant="outlined" startIcon={<DownloadIcon />}>
-                    System Performance
-                  </Button>
-                </Grid>
-                <Grid item>
-                  <Button variant="outlined" startIcon={<DownloadIcon />}>
-                    Fraud Detection Report
-                  </Button>
-                </Grid>
-              </Grid>
-            </Box>
-          </CardContent>
-        )}
-      </Card>
-
-      {/* User Details Dialog */}
-      <Dialog open={userDialogOpen} onClose={() => setUserDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>User Details</DialogTitle>
-        <DialogContent>
-          {selectedUser && (
-            <Box>
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <Typography variant="h6">{selectedUser.name}</Typography>
-                  <Typography color="text.secondary">{selectedUser.email}</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2">
-                    <strong>Role:</strong> {selectedUser.role}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2">
-                    <strong>Status:</strong> {selectedUser.status}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2">
-                    <strong>Join Date:</strong> {new Date(selectedUser.joinDate).toLocaleDateString()}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2">
-                    <strong>Documents:</strong> {selectedUser.documentsCount}
-                  </Typography>
-                </Grid>
-              </Grid>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setUserDialogOpen(false)}>Close</Button>
-          <Button variant="contained">Edit User</Button>
-        </DialogActions>
-      </Dialog>
+        </Card>
+      )}
     </DashboardLayout>
+  );
+}
+
+// Helper for Circular Progress
+function CircularProgressWithLabel(props) {
+  const color = props.value > 80 ? "success" : props.value > 50 ? "warning" : "error";
+  return (
+    <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+      <CircularProgress variant="determinate" value={props.value} color={color} size={30} />
+      <Box
+        sx={{
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: 0,
+          position: 'absolute',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Typography variant="caption" component="div" color="text.secondary">
+          {`${Math.round(props.value)}%`}
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 

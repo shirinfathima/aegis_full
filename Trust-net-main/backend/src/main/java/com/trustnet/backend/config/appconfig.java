@@ -1,5 +1,6 @@
 package com.trustnet.backend.config;
 
+import org.springframework.beans.factory.annotation.Value; // Import Value
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -8,17 +9,20 @@ import org.web3j.protocol.http.HttpService;
 
 @Configuration
 public class appconfig {
-    // Polygon Amoy RPC URL
-    private static final String AMOY_RPC_URL = "https://rpc-amoy.polygon.technology/";
+
+    // 1. Read the value from application.properties
+    // If the property is missing, it defaults to the public Amoy URL
+    @Value("${amoy.rpc-url:https://rpc-amoy.polygon.technology/}")
+    private String amoyRpcUrl;
 
     @Bean
     public WebClient.Builder webClientBuilder() {
         return WebClient.builder();
     }
 
-    // Creates the Web3j instance connected to the Amoy network
+    // 2. Use that value to build the Web3j service
     @Bean
     public Web3j web3j() {
-        return Web3j.build(new HttpService(AMOY_RPC_URL));
+        return Web3j.build(new HttpService(amoyRpcUrl));
     }
 }

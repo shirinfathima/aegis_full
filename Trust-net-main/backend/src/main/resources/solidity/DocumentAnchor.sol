@@ -2,21 +2,29 @@
 pragma solidity ^0.8.0;
 
 contract DocumentAnchor {
-    // Mapping: User ID (uint256) -> IPFS CID (string)
-    mapping(uint256 => string) public userDocumentCID;
+    address public issuer; // The authorized backend address
 
-    // Event to make it easy for off-chain services to track updates
-    event DocumentCIDUpdated(uint256 indexed userId, string newCid);
+    mapping(uint256 => uint256) public userDocumentCID;
+    mapping(uint256 => uint256) public anchoringTimestamp;
 
-    // Function to anchor a new document CID for a user
-    function storeDocumentCID(uint256 _userId, string memory _cid) public {
-        // NOTE: In the future, you will add logic here to restrict who can call this
-        userDocumentCID[_userId] = _cid;
-        emit DocumentCIDUpdated(_userId, _cid);
+    event DocumentCIDUpdated(uint256 indexed userId, uint256 newCid, uint256 timestamp);
+
+    constructor() {
+        issuer = msg.sender; // The person who deploys becomes the authorized issuer
     }
 
-    // Function to retrieve the latest CID for a user
-    function getDocumentCID(uint256 _userId) public view returns (string memory) {
-        return userDocumentCID[_userId];
+    modifier onlyIssuer() {
+        require(msg.sender == issuer, "Not authorized: Only the backend can anchor data");
+        _;
+    }
+
+    function storeDocumentCID(uint256 _userId, uint256 _cid) public onlyIssuer {
+        userDocumentCID[_userId] = _cid;
+        anchoringTimestamp[_userId] = block.timestamp;
+        emit DocumentCIDUpdated(_userId, _cid, block.timestamp);
+    }
+
+    function getDocumentCID(uint256 _userId) public view returns (uint256, uint256) {
+        return (userDocumentCID[_userId], anchoringTimestamp[_userId]);
     }
 }

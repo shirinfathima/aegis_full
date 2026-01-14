@@ -32,7 +32,8 @@ public class Document {
 
     private Double faceMatchConfidence;
 
-    private String ipfsCid; // This will be used later for IPFS integration
+    // Stores the raw IPFS CID string (e.g., "Qm...") so you can retrieve the file
+    private String ipfsCid; 
     
     // Stores the symmetric key, encrypted with the user's DID private key
     private String encryptedDocumentKey;
@@ -41,9 +42,15 @@ public class Document {
     @Column(columnDefinition = "TEXT") 
     private String verifiableCredential;
     
-    // NEW FIELD: To store the hash of the final signed VC for blockchain anchoring
-    private String vcHash;
+    // --- ZKP UPDATE ---
+    // This field now stores the numeric Poseidon Hash (Commitment) of the IPFS CID.
+    // It is stored as a String (e.g., "123456789...") but represents a BigInteger.
+    // This is the value that gets anchored on the blockchain.
+    private String vcHash; 
 
-    // NEW FIELD: To store the blockchain transaction hash for proof of anchoring
+    // To store the blockchain transaction hash for proof of anchoring
     private String blockchainTransactionHash;
+
+    // NEW FIELD: To store the timestamp of when the document was anchored on-chain
+    private String anchoringTime;
 }

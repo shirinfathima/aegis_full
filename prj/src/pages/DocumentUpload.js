@@ -1,132 +1,126 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Grid,
-  Alert,
-  Paper,
-  LinearProgress
-  // Chip has been removed from this list
+  Box, Container, Typography, Card, CardContent, Button, Grid, Alert, 
+  Paper, LinearProgress, Stepper, Step, StepLabel, CircularProgress
 } from '@mui/material';
 import {
-  CloudUpload as UploadIcon,
-  CheckCircle as CheckIcon,
+  CloudUpload as UploadIcon, CheckCircle as CheckIcon, 
   Article as ArticleIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import Webcam from 'react-webcam';
 import { uploadIdCard } from '../services/documentService';
+
+const steps = ['Upload ID Documents', 'Liveness Check', 'Verifying'];
 
 function DocumentUpload() {
   const navigate = useNavigate();
+  const webcamRef = useRef(null);
+  const [activeStep, setActiveStep] = useState(0);
+  
   const [frontFile, setFrontFile] = useState(null);
   const [backFile, setBackFile] = useState(null);
+  const [blinkCount, setBlinkCount] = useState(0);
+  const [isLivenessComplete, setIsLivenessComplete] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
 
   const handleFileSelect = (event, fileType) => {
     const file = event.target.files[0];
     if (!file) return;
-
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-    if (!allowedTypes.includes(file.type)) {
-      setError('Please select a valid image file (JPEG, PNG).');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setError('File size must be less than 10MB.');
-      return;
-    }
-    
     if (fileType === 'front') setFrontFile(file);
     else setBackFile(file);
     setError(null);
   };
 
-  const handleSubmit = async () => {
-    if (!frontFile || !backFile) {
-      setError('Please select both the front and back images of your ID.');
-      return;
+  useEffect(() => {
+    if (activeStep === 1 && blinkCount < 5) {
+      const timer = setTimeout(() => {
+        setBlinkCount(prev => prev + 1);
+      }, 1200); 
+      return () => clearTimeout(timer);
+    } else if (blinkCount >= 5 && !isLivenessComplete) {
+      capturePhotoAndSubmit();
     }
+  }, [activeStep, blinkCount, isLivenessComplete]);
 
-    setIsProcessing(true);
-    setError(null);
-
+  const capturePhotoAndSubmit = useCallback(async () => {
+    const imageSrc = webcamRef.current.getScreenshot();
+    setIsLivenessComplete(true);
+    setActiveStep(2);
+    
     try {
-      const result = await uploadIdCard(frontFile, backFile);
-      console.log('Upload successful, backend processing started:', result);
-      alert('Your document has been submitted for verification!');
-      
-      // Navigate back to the dashboard to see the new pending document
+      const blob = await fetch(imageSrc).then(res => res.blob());
+      const selfieFile = new File([blob], "selfie.jpg", { type: "image/jpeg" });
+
+      await uploadIdCard(frontFile, backFile, selfieFile);
+      alert('Verification process started successfully!');
       navigate('/user');
     } catch (err) {
-      setError(err.message || 'An unexpected error occurred during upload.');
-    } finally {
-      setIsProcessing(false);
+      setError(err.message || 'Verification failed.');
+      setActiveStep(0);
+      setBlinkCount(0);
+      setIsLivenessComplete(false);
     }
-  };
-
-  const FileUploadBox = ({ file, onSelect, title, inputId }) => (
-    <Paper
-      sx={{ border: '2px dashed #ccc', p: 3, textAlign: 'center', cursor: 'pointer', backgroundColor: file ? '#f5f5f5' : 'transparent', '&:hover': { backgroundColor: '#f9f9f9' }}}
-      onClick={() => document.getElementById(inputId).click()}
-    >
-      <input id={inputId} type="file" accept=".jpg,.jpeg,.png" onChange={onSelect} style={{ display: 'none' }} />
-      {file ? (
-        <Box>
-          <CheckIcon color="success" sx={{ fontSize: 48, mb: 2 }} />
-          <Typography variant="h6">{file.name}</Typography>
-          <Typography variant="body2" color="text.secondary">{(file.size / 1024 / 1024).toFixed(2)} MB</Typography>
-        </Box>
-      ) : (
-        <Box>
-          <ArticleIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary">{title}</Typography>
-        </Box>
-      )}
-    </Paper>
-  );
+  }, [webcamRef, frontFile, backFile, navigate]);
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}><UploadIcon /> Document Upload</Typography>
-        <Typography variant="body1" color="text.secondary">Upload the front and back of your ID document to begin verification.</Typography>
-      </Box>
+      <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+        {steps.map((label) => <Step key={label}><StepLabel>{label}</StepLabel></Step>)}
+      </Stepper>
 
-      <Card>
-        <CardContent>
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-              <FileUploadBox file={frontFile} onSelect={(e) => handleFileSelect(e, 'front')} title="Upload Front of ID" inputId="front-upload" />
+      {activeStep === 0 && (
+        <Card>
+          <CardContent>
+            <Typography variant="h5" sx={{ mb: 3 }}>Step 1: Upload ID Images</Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <FileUploadBox file={frontFile} onSelect={(e) => handleFileSelect(e, 'front')} title="Front of ID" inputId="f-up" />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <FileUploadBox file={backFile} onSelect={(e) => handleFileSelect(e, 'back')} title="Back of ID" inputId="b-up" />
+              </Grid>
             </Grid>
-            <Grid item xs={12} md={6}>
-              <FileUploadBox file={backFile} onSelect={(e) => handleFileSelect(e, 'back')} title="Upload Back of ID" inputId="back-upload" />
-            </Grid>
-          </Grid>
-          
-          {error && <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>}
-          {isProcessing && <LinearProgress sx={{ mt: 3 }} />}
+            {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+            <Box sx={{ mt: 3, textAlign: 'center' }}>
+              <Button variant="contained" onClick={() => setActiveStep(1)} disabled={!frontFile || !backFile}>
+                Continue to Liveness Check
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+      )}
 
-          <Box sx={{ mt: 3, textAlign: 'center' }}>
-            <Button
-              variant="contained"
-              size="large"
-              onClick={handleSubmit}
-              disabled={!frontFile || !backFile || isProcessing}
-              startIcon={<CheckIcon />}
-              sx={{ py: 1.5, px: 5 }}
-            >
-              {isProcessing ? 'Submitting...' : 'Submit for Verification'}
-            </Button>
+      {activeStep === 1 && (
+        <Card sx={{ textAlign: 'center', p: 3 }}>
+          <Typography variant="h5" color="primary" gutterBottom>Step 2: Blink 5 Times</Typography>
+          <Box sx={{ position: 'relative', display: 'inline-block', mt: 2 }}>
+            <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" style={{ width: '100%', maxWidth: '500px', borderRadius: '12px' }} />
+            <Box sx={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', bgcolor: 'rgba(0,0,0,0.7)', color: 'white', px: 3, py: 1, borderRadius: 10 }}>
+              <Typography variant="h6">Blinks: {blinkCount} / 5</Typography>
+            </Box>
           </Box>
-        </CardContent>
-      </Card>
+          <LinearProgress variant="determinate" value={(blinkCount / 5) * 100} sx={{ mt: 3, height: 10, borderRadius: 5 }} />
+        </Card>
+      )}
+
+      {activeStep === 2 && (
+        <Card sx={{ textAlign: 'center', py: 10 }}>
+          <CircularProgress size={60} />
+          <Typography variant="h6" sx={{ mt: 3 }}>Processing AI Verification...</Typography>
+        </Card>
+      )}
     </Container>
   );
 }
+
+const FileUploadBox = ({ file, onSelect, title, inputId }) => (
+  <Paper sx={{ border: '2px dashed #ccc', p: 3, textAlign: 'center', cursor: 'pointer', '&:hover': { bgcolor: '#f9f9f9' }}} onClick={() => document.getElementById(inputId).click()}>
+    <input id={inputId} type="file" accept="image/*" onChange={onSelect} style={{ display: 'none' }} />
+    {file ? <CheckIcon color="success" sx={{ fontSize: 48 }} /> : <ArticleIcon sx={{ fontSize: 48, color: 'text.secondary' }} />}
+    <Typography variant="subtitle1">{file ? file.name : title}</Typography>
+  </Paper>
+);
 
 export default DocumentUpload;
