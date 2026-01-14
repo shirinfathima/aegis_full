@@ -50,4 +50,7 @@ public class Document {
 
     // To store the blockchain transaction hash for proof of anchoring
     private String blockchainTransactionHash;
+
+    // NEW FIELD: To store the timestamp of when the document was anchored on-chain
+    private String anchoringTime;
 }
