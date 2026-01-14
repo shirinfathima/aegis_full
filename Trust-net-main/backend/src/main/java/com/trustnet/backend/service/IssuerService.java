@@ -10,7 +10,9 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 
+import java.security.MessageDigest;
 import java.util.List;
+import java.math.BigInteger;
 
 @Service
 public class IssuerService {
@@ -27,7 +29,17 @@ public class IssuerService {
     @Autowired
     private BlockchainService blockchainService;
 
-    // NOTE: Removed sha256Hash helper method as it is no longer needed for ZKP anchoring.
+    // UPDATED: Now returns a numeric string for uint256 compatibility
+    private String sha256Hash(String data) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(data.getBytes("UTF-8"));
+            // Convert to a positive BigInteger and then to a String
+            return new BigInteger(1, hash).toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to calculate SHA-256 hash.", e);
+        }
+    }
 
     public List<Document> getPendingDocuments() {
         return documentRepository.findByStatus(VerificationStatus.PENDING);
@@ -51,23 +63,23 @@ public class IssuerService {
                 throw new RuntimeException("Failed to generate VC due to invalid document OCR data.", e);
             }
 
-            // 3. Retrieve the ZK-Friendly Hash (Commitment) stored during Upload
-            // This 'vcHash' field was populated in UploadService with the Poseidon Hash of the IPFS CID.
-            String zkCommitment = document.getVcHash();
-
-            if (zkCommitment == null || zkCommitment.isEmpty()) {
-                throw new RuntimeException("Cannot anchor document: ZK Commitment (vcHash) is missing.");
-            }
+            // 3. Calculate VC Hash for Anchoring (Step 5, Requirement 2)
+            // This now returns a numeric string safe for the contract
+            String vcHash = sha256Hash(verifiableCredential);
+            document.setVcHash(vcHash);
             
-            // 4. ANCHOR THE PROOF TO THE BLOCKCHAIN
+            // 4. ANCHOR THE PROOF TO THE BLOCKCHAIN (Step 5, Requirement 3 & 4)
             try {
-                // Pass the numeric Poseidon hash string directly to the blockchain service
-                // The service will convert this String -> BigInteger -> uint256
-                TransactionReceipt receipt = blockchainService.anchorDocumentCID(document.getUserId(), zkCommitment);
+                // Anchoring the VC Hash to the blockchain 
+                TransactionReceipt receipt = blockchainService.anchorDocumentCID(document.getUserId(), vcHash);
                 
                 // Update Document entity with the Transaction Hash
                 document.setBlockchainTransactionHash(receipt.getTransactionHash());
                 
+                // Optional: You could fetch the block timestamp here if needed, 
+                // or just set the current system time as an approximation for the database
+                document.setAnchoringTime(String.valueOf(System.currentTimeMillis() / 1000));
+
                 System.out.println("✅ Blockchain Anchoring Successful. Tx Hash: " + receipt.getTransactionHash());
             } catch (Exception e) {
                 System.err.println("❌ Blockchain Anchoring Failed: " + e.getMessage());
