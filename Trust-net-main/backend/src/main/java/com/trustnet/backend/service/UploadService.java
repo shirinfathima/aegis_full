@@ -18,8 +18,6 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 
-// Added imports for ZK Hashing and Base58 support
-import org.bitcoinj.core.Base58; 
 import com.trustnet.backend.service.ZkHashUtils;
 import java.math.BigInteger;
 
@@ -56,16 +54,10 @@ public class UploadService {
     @Value("${pinata.secret-api-key}")
     private String pinataSecretApiKey;
 
-    /**
-     * Delegates the generation of a ZK-friendly hash to the ZkHashUtils.
-     */
     private String generateZkFriendlyCidHash(String ipfsCid) {
-        // Calls the centralized utility to handle Base58 decoding and field-element hashing
         BigInteger hash = ZkHashUtils.hashIpfsCid(ipfsCid);
         return hash.toString();
     }
-
-    // --- Cryptographic Utility Methods ---
 
     private SecretKey generateAesKey() throws Exception {
         KeyGenerator keyGen = KeyGenerator.getInstance(AES_ALGORITHM);
@@ -80,7 +72,6 @@ public class UploadService {
     }
 
     private String encryptDocumentKeyWithDidPrivateKey(SecretKey documentKey, String didPrivateKeyPlaceholder) {
-        // In a real implementation, use the user's DID private key for asymmetric encryption
         return Base64.getEncoder().encodeToString(documentKey.getEncoded());
     }
 
@@ -106,21 +97,17 @@ public class UploadService {
         
         ObjectMapper mapper = new ObjectMapper();
         JsonNode root = mapper.readTree(responseBody);
-        String cid = root.path("IpfsHash").asText();
-        
-        if (cid == null || cid.isEmpty()) {
-             throw new Exception("IPFS Upload failed: CID not found in Pinata response.");
-        }
-        return cid;
+        return root.path("IpfsHash").asText();
     }
 
-    public Document processIdCard(MultipartFile frontImage, MultipartFile backImage, Long userId) throws Exception {
+    public Document processIdCard(MultipartFile frontImage, MultipartFile backImage, MultipartFile selfieImage, Long userId) throws Exception {
         Optional<User> userOptional = userRepository.findById(userId);
         if (userOptional.isEmpty()) throw new Exception("User not found: " + userId);
         User user = userOptional.get();
 
         byte[] frontImageBytes = frontImage.getBytes();
         byte[] backImageBytes = backImage.getBytes();
+        byte[] selfieImageBytes = selfieImage.getBytes();
         
         String frontImageName = Path.of(frontImage.getOriginalFilename()).getFileName().toString();
         Path frontPath = Paths.get("uploads/docs/" + frontImageName);
@@ -131,9 +118,14 @@ public class UploadService {
         Path backPath = Paths.get("uploads/docs/" + backImageName);
         Files.write(backPath, backImageBytes, StandardOpenOption.CREATE);
         
+        String selfieName = "selfie_" + userId + "_" + System.currentTimeMillis() + ".jpg";
+        Path selfiePath = Paths.get("uploads/selfies/" + selfieName);
+        Files.createDirectories(selfiePath.getParent());
+        Files.write(selfiePath, selfieImageBytes, StandardOpenOption.CREATE);
+        
         try {
-            JsonNode faceMatchResult = triggerLivenessAndFaceMatch(frontPath);
-            double confidence = faceMatchResult.path("confidence").asDouble(0.0);
+            JsonNode result = triggerLivenessAndFaceMatch(frontPath, selfiePath);
+            double confidence = result.path("verification").path("confidence").asDouble(0.0);
 
             String ocrFront = extractTextFromDocument(frontPath, "front");
             String ocrBack = extractTextFromDocument(backPath, "back");
@@ -147,36 +139,45 @@ public class UploadService {
             System.arraycopy(encryptedFrontBytes, 0, combinedEncryptedBytes, 0, encryptedFrontBytes.length);
             System.arraycopy(encryptedBackBytes, 0, combinedEncryptedBytes, encryptedFrontBytes.length, encryptedBackBytes.length);
 
-            // 1. Upload to IPFS via Pinata
             String ipfsCid = ipfsUpload(combinedEncryptedBytes, frontImageName + "_encrypted.zip");
-            
-            // 2. Generate the ZK Commitment (Numeric Hash of the CID)
             String cidHash = generateZkFriendlyCidHash(ipfsCid);
-            
             String encryptedDocumentKey = encryptDocumentKeyWithDidPrivateKey(documentAesKey, user.getDidPrivateKey());
             
-            Files.deleteIfExists(frontPath);
-            Files.deleteIfExists(backPath);
-
-            // 3. Build the Document entity, storing both the raw CID and the Hash
             Document document = Document.builder()
                 .userId(userId)
                 .documentName(frontImageName)
-                .selfieName("live_capture.jpg")
+                .selfieName(selfieName)
                 .ocrData(combinedOcr)
                 .faceMatchConfidence(confidence)
                 .status(VerificationStatus.PENDING)
                 .ipfsCid(ipfsCid) 
-                .vcHash(cidHash) // Using vcHash field for the ZKP commitment
+                .vcHash(cidHash)
                 .encryptedDocumentKey(encryptedDocumentKey)
                 .build();
 
             return documentRepository.save(document);
 
         } catch (Exception e) {
-            Files.deleteIfExists(frontPath);
-            Files.deleteIfExists(backPath);
             throw new RuntimeException("Processing failed: " + e.getMessage(), e);
+        } finally {
+            // Robust cleanup in finally block to ensure files are released
+            cleanupFiles(frontPath, backPath, selfiePath);
+        }
+    }
+
+    private void cleanupFiles(Path... paths) {
+        // Suggest garbage collection to help release file handles held by WebClient/OS
+        System.gc(); 
+        for (Path path : paths) {
+            try {
+                if (path != null) {
+                    Files.deleteIfExists(path);
+                }
+            } catch (IOException e) {
+                // If it fails, mark it for deletion when the JVM exits as a fallback
+                path.toFile().deleteOnExit();
+                System.err.println("Cleanup failed for " + path + ": " + e.getMessage());
+            }
         }
     }
 
@@ -184,7 +185,7 @@ public class UploadService {
         byte[] fileBytes = Files.readAllBytes(docPath);
         return webClientBuilder.build()
                 .post()
-                .uri("http://192.168.38.137:5000/ocr")
+                .uri("http://localhost:5000/ocr")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData("file", new ByteArrayResource(fileBytes) {
                     @Override public String getFilename() { return imageSide + ".jpg"; }
@@ -194,15 +195,23 @@ public class UploadService {
                 .block();
     }
 
-    private JsonNode triggerLivenessAndFaceMatch(Path docPath) throws IOException {
-        byte[] fileBytes = Files.readAllBytes(docPath);
+    private JsonNode triggerLivenessAndFaceMatch(Path docPath, Path selfiePath) throws IOException {
+        byte[] docBytes = Files.readAllBytes(docPath);
+        byte[] selfieBytes = Files.readAllBytes(selfiePath);
+
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("frontImage", new ByteArrayResource(docBytes) {
+            @Override public String getFilename() { return docPath.getFileName().toString(); }
+        });
+        body.add("selfieImage", new ByteArrayResource(selfieBytes) {
+            @Override public String getFilename() { return selfiePath.getFileName().toString(); }
+        });
+
         String response = webClientBuilder.build()
                 .post()
                 .uri("http://localhost:5002/liveness-check")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
-                .body(BodyInserters.fromMultipartData("document", new ByteArrayResource(fileBytes) {
-                    @Override public String getFilename() { return docPath.getFileName().toString(); }
-                }))
+                .body(BodyInserters.fromMultipartData(body))
                 .retrieve()
                 .bodyToMono(String.class)
                 .block();
