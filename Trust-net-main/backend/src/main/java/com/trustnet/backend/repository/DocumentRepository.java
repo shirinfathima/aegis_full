@@ -12,4 +12,6 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
     // Custom query to find all documents belonging to a specific user
     List<Document> findByUserId(Long userId);
+
+    List<Document> findByIssuerIdAndStatus(Long issuerId, VerificationStatus status);
 }

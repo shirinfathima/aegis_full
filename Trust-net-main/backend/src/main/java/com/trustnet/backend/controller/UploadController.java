@@ -16,21 +16,16 @@ public class UploadController {
     @Autowired
     private UploadService uploadService;
 
-    // This is the new endpoint for the two-sided ID card upload
     @PostMapping("/id-card")
     public ResponseEntity<Document> uploadIdCard(
             @RequestParam("frontImage") MultipartFile frontImage,
             @RequestParam("backImage") MultipartFile backImage,
+            @RequestParam("selfieImage") MultipartFile selfieImage,
+            @RequestParam("issuerId") Long issuerId, // New parameter
             @AuthenticationPrincipal User user) {
-
         try {
-            Document savedDocument = uploadService.processIdCard(frontImage, backImage, user.getId());
-            
-            if (savedDocument != null) {
-                return ResponseEntity.ok(savedDocument);
-            } else {
-                return ResponseEntity.status(500).build();
-            }
+            Document savedDocument = uploadService.processIdCard(frontImage, backImage, selfieImage, user.getId(), issuerId);
+            return savedDocument != null ? ResponseEntity.ok(savedDocument) : ResponseEntity.status(500).build();
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).build();

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Modal, Box, Typography, TextField, Button, Divider, Link,
+  Modal, Box, Typography, TextField, Button, Link,
   FormControl, InputLabel, Select, MenuItem, Alert
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
@@ -66,17 +66,7 @@ function SignUpModal({ open, onClose, onSignInClick }) {
 
         // Redirect to the correct dashboard based on the user's role
         const role = user.role.toLowerCase();
-        switch(role) {
-          case 'issuer':
-            navigate('/issuer/dashboard');
-            break;
-          case 'verifier':
-            navigate('/verifier/dashboard');
-            break;
-          case 'user':
-          default:
-            navigate('/user');
-        }
+        navigate(`/welcome/${role}`);
       }
     } catch (error) {
       // The authService throws an error on failure, which we catch here

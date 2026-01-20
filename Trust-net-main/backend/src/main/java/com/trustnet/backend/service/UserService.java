@@ -12,6 +12,7 @@ import java.security.spec.ECGenParameterSpec;
 import java.util.Base64;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.List;
 
 @Service
 public class UserService {
@@ -101,5 +102,10 @@ public class UserService {
         } else {
             return "Invalid password";
         }
+    }
+
+    // NEW: Method to get all issuers
+    public List<User> getAllIssuers() {
+        return userRepo.findByRole(Role.ISSUER);
     }
 }

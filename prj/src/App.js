@@ -16,6 +16,10 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import ProfileDetails from './pages/ProfileDetails';
 import IssuedDocuments from './pages/IssuedDocuments';
 import DocumentReview from './pages/DocumentReview'; 
+// ADD THESE IMPORTS:
+import UserWelcome from './pages/UserWelcome';
+import IssuerWelcome from './pages/IssuerWelcome';
+import VerifierWelcome from './pages/VerifierWelcome';
 
 function App() {
   return (
@@ -26,6 +30,11 @@ function App() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         
+        {/* Role Specific Welcome Pages */}
+        <Route path="/welcome/user" element={<UserWelcome />} />
+        <Route path="/welcome/issuer" element={<IssuerWelcome />} />
+        <Route path="/welcome/verifier" element={<VerifierWelcome />} />
+
         {/* User Routes */}
         <Route path="/user" element={<UserDashboard />} />
         <Route path="/profile-details" element={<ProfileDetails />} /> 

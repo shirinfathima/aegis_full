@@ -5,6 +5,7 @@ import com.trustnet.backend.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity; // Import ResponseEntity
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/user")
@@ -36,5 +37,11 @@ public class UserController {
             // Failure: return an Unauthorized/Bad Request response with the error message
             return ResponseEntity.status(401).body(result); 
         }
+    }
+    
+    // NEW: Endpoint to fetch all issuers
+    @GetMapping("/issuers")
+    public ResponseEntity<List<User>> getIssuers() {
+        return ResponseEntity.ok(userService.getAllIssuers());
     }
 }

@@ -44,17 +44,8 @@ function SignInModal({ open, onClose, onSignUpClick }) {
         // Use the role from the returned user object
         const role = user.role.toLowerCase(); 
         
-        switch(role) {
-          case 'issuer':
-            navigate('/issuer/dashboard');
-            break;
-          case 'verifier':
-            navigate('/verifier/dashboard');
-            break;
-          case 'user':
-          default:
-            navigate('/user');
-        }
+        // Redirect to role-specific welcome page
+        navigate(`/welcome/${role}`);
       }
     } catch (error) {
       setSubmissionMessage('Login failed. Invalid credentials.');
