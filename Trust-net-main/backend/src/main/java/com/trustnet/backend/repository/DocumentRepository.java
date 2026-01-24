@@ -6,10 +6,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 public interface DocumentRepository extends JpaRepository<Document, Long> {
-    
-    // Custom query to find all documents with a specific status
-    List<Document> findByStatus(VerificationStatus status);
 
-    // Custom query to find all documents belonging to a specific user
+    // Used by User Dashboard (Show all their docs)
     List<Document> findByUserId(Long userId);
+
+    // ✅ Used by Verifier (Strict Mode: Show ONLY Approved)
+    List<Document> findByUserIdAndStatus(Long userId, VerificationStatus status);
+
+    // Used by Issuer Dashboard (Show Pending Queue)
+    List<Document> findByStatus(VerificationStatus status);
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import IncomingRequests from './IncomingRequests'; // <--- NEW IMPORT
 import {
   Box,
   Typography,
@@ -56,7 +57,6 @@ function UserDashboard() {
     setUser(currentUser);
     
     const fetchDocuments = async () => {
-      // FIX: Use getStoredPassword for HTTP Basic Auth
       const storedPassword = getStoredPassword();
       if (!currentUser || !storedPassword) {
           setError("Your session has expired. Please log in again.");
@@ -69,7 +69,6 @@ function UserDashboard() {
       try {
         const response = await fetch('http://localhost:8080/api/documents/my-documents', {
           headers: {
-            // FIX: Use storedPassword
             'Authorization': 'Basic ' + btoa(`${currentUser.email}:${storedPassword}`)
           }
         });
@@ -193,6 +192,11 @@ function UserDashboard() {
           Manage your documents and track verification status
         </Typography>
       </Box>
+
+      {/* --- NEW INBOX COMPONENT ADDED HERE --- */}
+      <IncomingRequests userEmail={user.email} />
+      {/* -------------------------------------- */}
+
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>Verification Progress</Typography>
@@ -266,7 +270,7 @@ function UserDashboard() {
                               <Button
                                 size="small"
                                 variant="outlined"
-                                onClick={() => navigate('/issued-documents')} // MODIFIED HERE
+                                onClick={() => navigate('/issued-documents')}
                               >
                                 View Credential
                               </Button>
