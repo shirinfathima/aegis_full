@@ -153,6 +153,11 @@ public class UploadService {
                 .ipfsCid(ipfsCid) 
                 .vcHash(cidHash)
                 .encryptedDocumentKey(encryptedDocumentKey)
+                // --- ADD THESE 3 LINES ---
+                .tempDocData(frontImageBytes)      // Save Front ID to DB
+                .tempDocBackData(backImageBytes)   // Save Back ID to DB
+                .tempSelfieData(selfieImageBytes)  // Save Selfie to DB
+                // -------------------------
                 .build();
 
             return documentRepository.save(document);

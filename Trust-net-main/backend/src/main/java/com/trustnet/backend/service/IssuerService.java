@@ -81,6 +81,11 @@ public class IssuerService {
                 document.setAnchoringTime(String.valueOf(System.currentTimeMillis() / 1000));
 
                 System.out.println("✅ Blockchain Anchoring Successful. Tx Hash: " + receipt.getTransactionHash());
+                // --- HARD DELETE TEMPORARY IMAGES ---
+                // This ensures the raw personal data is removed from the database
+                document.setTempDocData(null);     // Delete Front ID
+                document.setTempDocBackData(null); // Delete Back ID
+                document.setTempSelfieData(null);  // Delete Selfie
             } catch (Exception e) {
                 System.err.println("❌ Blockchain Anchoring Failed: " + e.getMessage());
                 throw new RuntimeException("Blockchain anchoring failed. Please ensure the private key is valid and the network is reachable.", e);
@@ -93,6 +98,9 @@ public class IssuerService {
     public Document rejectDocument(Long documentId) {
         return documentRepository.findById(documentId).map(document -> {
             document.setStatus(VerificationStatus.REJECTED);
+            document.setTempDocData(null);
+            document.setTempDocBackData(null);
+            document.setTempSelfieData(null);
             return documentRepository.save(document);
         }).orElseThrow(() -> new RuntimeException("Document not found with id " + documentId));
     }

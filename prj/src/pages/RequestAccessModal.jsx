@@ -21,30 +21,34 @@ const RequestAccessModal = ({ isOpen, onClose, document, verifierEmail, userEmai
     setLoading(true);
     setStatus('idle');
 
-    // --- FIX STARTS HERE ---
-    // 1. Get Password from Session Storage (just like the Dashboard does)
+    // 1. Get Password & Create Auth Header
     const password = sessionStorage.getItem('temp_pass');
-    
-    // 2. Create the Auth Header
     const authHeader = 'Basic ' + btoa(`${verifierEmail}:${password}`);
-    // --- FIX ENDS HERE ---
+
+    // 2. Determine allowedFields based on selection
+    let fieldsToSend = "ALL"; // Default for FULL
+    if (accessType === 'REDACTED') {
+        fieldsToSend = selectedFields.join(',');
+    } else if (accessType === 'ZKP_AGE') {
+        fieldsToSend = "AGE_CHECK_ONLY"; // Special flag for ZKP
+    }
 
     const payload = {
       verifierEmail,
       userEmail,
       documentId: document?.id,
       accessType,
-      allowedFields: accessType === 'REDACTED' ? selectedFields.join(',') : "ALL"
+      allowedFields: fieldsToSend
     };
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 800)); // Fake nice delay
 
       const response = await fetch('http://localhost:8080/api/verifier/request-access', {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
-            'Authorization': authHeader // <--- THIS WAS MISSING
+            'Authorization': authHeader 
         },
         body: JSON.stringify(payload)
       });
@@ -82,7 +86,10 @@ const RequestAccessModal = ({ isOpen, onClose, document, verifierEmail, userEmai
         <div className="modal-body">
           <p className="instruction-text">How would you like to view this credential?</p>
           
-          <div className="selection-grid">
+          {/* 👇 UPDATED GRID: Now holds 3 Cards */}
+          <div className="selection-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            
+            {/* Option 1: Full View */}
             <div 
               className={`option-card ${accessType === 'FULL' ? 'active' : ''}`}
               onClick={() => setAccessType('FULL')}
@@ -90,11 +97,12 @@ const RequestAccessModal = ({ isOpen, onClose, document, verifierEmail, userEmai
               <div className="card-icon">👁️</div>
               <div className="card-info">
                 <h4>Full View</h4>
-                <p>See the entire original document.</p>
+                <p>See original document.</p>
               </div>
               <div className="check-circle"></div>
             </div>
 
+            {/* Option 2: Redacted */}
             <div 
               className={`option-card ${accessType === 'REDACTED' ? 'active' : ''}`}
               onClick={() => setAccessType('REDACTED')}
@@ -102,12 +110,27 @@ const RequestAccessModal = ({ isOpen, onClose, document, verifierEmail, userEmai
               <div className="card-icon">✂️</div>
               <div className="card-info">
                 <h4>Redacted</h4>
-                <p>Hide sensitive info, request specific fields.</p>
+                <p>Select specific fields.</p>
               </div>
               <div className="check-circle"></div>
             </div>
+
+            {/* 👇 NEW Option 3: ZK Age Proof */}
+            <div 
+              className={`option-card ${accessType === 'ZKP_AGE' ? 'active' : ''}`}
+              onClick={() => setAccessType('ZKP_AGE')}
+            >
+              <div className="card-icon">🔞</div>
+              <div className="card-info">
+                <h4>ZK Proof</h4>
+                <p>Verify age, hide data.</p>
+              </div>
+              <div className="check-circle"></div>
+            </div>
+
           </div>
 
+          {/* Redaction Area (Only visible if Redacted selected) */}
           <div className={`redaction-area ${accessType === 'REDACTED' ? 'open' : ''}`}>
             <p className="mini-label">TAP TO SELECT FIELDS:</p>
             <div className="chip-container">
@@ -123,6 +146,7 @@ const RequestAccessModal = ({ isOpen, onClose, document, verifierEmail, userEmai
             </div>
           </div>
 
+          {/* Status Messages */}
           {status === 'success' && <div className="status-banner success">🎉 Request Sent Successfully!</div>}
           {status === 'error' && <div className="status-banner error">⚠️ Authorization Failed or Server Error.</div>}
         </div>

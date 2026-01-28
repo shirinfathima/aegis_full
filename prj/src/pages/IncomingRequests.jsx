@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { 
   Card, CardContent, Typography, Button, 
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
-  Paper, Chip, Select, MenuItem, FormControl, Alert 
+  Paper, Select, MenuItem, FormControl, Alert, Chip, CircularProgress 
 } from '@mui/material';
-import { AccessTime, CheckCircle, Cancel } from '@mui/icons-material';
+import { AccessTime, CheckCircle, Cancel, Security, Visibility } from '@mui/icons-material';
 
 const IncomingRequests = ({ userEmail }) => {
   const [requests, setRequests] = useState([]);
-  const [durations, setDurations] = useState({}); // Stores selected duration for each row
+  const [durations, setDurations] = useState({}); 
+  const [processingId, setProcessingId] = useState(null); // To show loading spinner
 
   useEffect(() => {
     if(userEmail) fetchRequests();
@@ -22,7 +23,6 @@ const IncomingRequests = ({ userEmail }) => {
       });
       if (response.ok) {
         const data = await response.json();
-        // Only show PENDING requests
         setRequests(data.filter(r => r.status === 'PENDING'));
       }
     } catch (error) {
@@ -34,17 +34,34 @@ const IncomingRequests = ({ userEmail }) => {
     setDurations({ ...durations, [reqId]: minutes });
   };
 
-  const handleResponse = async (reqId, status) => {
+  const handleResponse = async (request, status) => {
+    setProcessingId(request.id); // Start loading
     const password = sessionStorage.getItem('temp_pass');
-    const duration = durations[reqId] || 60; // Default to 60 mins
-
-    const payload = {
-      requestId: reqId,
-      status: status,
-      durationInMinutes: duration
-    };
+    const duration = durations[request.id] || 60; // Default 1 hour
+    let proofData = null;
 
     try {
+      // --- 1. IF ZKP REQUEST, GENERATE PROOF FIRST ---
+      if (status === 'APPROVED' && request.accessType === 'ZKP_AGE') {
+        console.log("Generating ZK Proof for Document ID:", request.document.id);
+        
+        const proofRes = await fetch(`http://localhost:8080/api/user/generate-proof/age?documentId=${request.document.id}`, {
+             method: 'POST',
+             headers: { 'Authorization': 'Basic ' + btoa(`${userEmail}:${password}`) }
+        });
+        
+        if (!proofRes.ok) throw new Error("Failed to generate Zero-Knowledge Proof");
+        proofData = await proofRes.text(); // Get proof JSON string
+      }
+
+      // --- 2. SEND RESPONSE TO BACKEND ---
+      const payload = {
+        requestId: request.id,
+        status: status,
+        durationInMinutes: duration,
+        generatedProof: proofData // Attach proof (will be null for normal requests)
+      };
+
       await fetch('http://localhost:8080/api/user/respond-request', {
         method: 'POST',
         headers: { 
@@ -55,11 +72,13 @@ const IncomingRequests = ({ userEmail }) => {
       });
       
       // Remove from list
-      setRequests(requests.filter(r => r.id !== reqId));
-      alert(`Request ${status === 'APPROVED' ? 'Approved' : 'Rejected'}!`);
+      setRequests(requests.filter(r => r.id !== request.id));
       
     } catch (error) {
       console.error("Error updating request:", error);
+      alert("Error: " + error.message);
+    } finally {
+      setProcessingId(null); // Stop loading
     }
   };
 
@@ -78,7 +97,7 @@ const IncomingRequests = ({ userEmail }) => {
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f5f5f5' }}>
                   <TableCell><strong>Requester</strong></TableCell>
-                  <TableCell><strong>Document</strong></TableCell>
+                  <TableCell><strong>Type</strong></TableCell>
                   <TableCell><strong>Access Duration</strong></TableCell>
                   <TableCell align="right"><strong>Action</strong></TableCell>
                 </TableRow>
@@ -88,9 +107,17 @@ const IncomingRequests = ({ userEmail }) => {
                   <TableRow key={req.id}>
                     <TableCell>
                         <Typography variant="body2" fontWeight="bold">{req.verifierEmail}</Typography>
-                        <Typography variant="caption">{new Date(req.requestDate).toLocaleDateString()}</Typography>
+                        <Typography variant="caption">{req.document?.documentName}</Typography>
                     </TableCell>
-                    <TableCell>{req.document ? req.document.documentName : "Unknown Doc"}</TableCell>
+                    
+                    {/* Access Type Badge */}
+                    <TableCell>
+                        {req.accessType === 'ZKP_AGE' ? (
+                            <Chip icon={<Security />} label="ZK Proof" color="success" size="small" variant="outlined" />
+                        ) : (
+                            <Chip icon={<Visibility />} label="Full View" color="primary" size="small" variant="outlined" />
+                        )}
+                    </TableCell>
                     
                     {/* Duration Selector */}
                     <TableCell>
@@ -103,7 +130,6 @@ const IncomingRequests = ({ userEmail }) => {
                           <MenuItem value={15}>15 Minutes</MenuItem>
                           <MenuItem value={60}>1 Hour</MenuItem>
                           <MenuItem value={1440}>24 Hours</MenuItem>
-                          <MenuItem value={10080}>7 Days</MenuItem>
                         </Select>
                       </FormControl>
                     </TableCell>
@@ -112,18 +138,20 @@ const IncomingRequests = ({ userEmail }) => {
                     <TableCell align="right">
                       <Button 
                         variant="contained" color="success" size="small" 
-                        startIcon={<CheckCircle />}
-                        onClick={() => handleResponse(req.id, 'APPROVED')}
+                        disabled={processingId === req.id}
+                        startIcon={processingId === req.id ? <CircularProgress size={16} color="inherit"/> : <CheckCircle />}
+                        onClick={() => handleResponse(req, 'APPROVED')}
                         sx={{ mr: 1 }}
                       >
-                        Approve
+                        {req.accessType === 'ZKP_AGE' ? "Gen Proof" : "Approve"}
                       </Button>
                       <Button 
                         variant="outlined" color="error" size="small" 
+                        disabled={processingId === req.id}
                         startIcon={<Cancel />}
-                        onClick={() => handleResponse(req.id, 'REJECTED')}
+                        onClick={() => handleResponse(req, 'REJECTED')}
                       >
-                        Reject
+                        Deny
                       </Button>
                     </TableCell>
                   </TableRow>

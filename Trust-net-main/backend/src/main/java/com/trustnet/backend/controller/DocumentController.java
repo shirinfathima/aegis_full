@@ -3,6 +3,7 @@ package com.trustnet.backend.controller;
 import com.trustnet.backend.entity.Document;
 import com.trustnet.backend.entity.User;
 import com.trustnet.backend.repository.DocumentRepository;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,6 +21,7 @@ public class DocumentController {
     private DocumentRepository documentRepository;
 
     @GetMapping("/my-documents")
+    @Transactional(readOnly = true) // 2. Add this Annotation
     public ResponseEntity<List<Document>> getUserDocuments(@AuthenticationPrincipal User user) {
         // Spring Security provides the logged-in user.
         // We use the user's ID to find their specific documents.

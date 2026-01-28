@@ -11,6 +11,7 @@ import com.trustnet.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.trustnet.backend.service.ZkProofService;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,6 +31,9 @@ public class VerifierController {
 
     @Autowired
     private AccessRequestRepository accessRequestRepository;
+
+    @Autowired
+    private ZkProofService zkProofService;
 
     // --- 1. SEARCH USER DOCUMENTS ---
     @GetMapping("/search-user")
@@ -101,4 +105,23 @@ public class VerifierController {
     public ResponseEntity<String> getVerifierDashboardData() {
         return ResponseEntity.ok("Successfully retrieved Verifier Dashboard data");
     }
+
+    // --- NEW ZKP ENDPOINT ---
+        @PostMapping("/generate-proof/age")
+        public ResponseEntity<?> generateAgeProof(@RequestParam Long documentId) {
+            try {
+                // 1. Fetch the private document (Backend access only)
+                Document doc = documentRepository.findById(documentId)
+                    .orElseThrow(() -> new RuntimeException("Document not found"));
+                    
+                // 2. Run the ZK Logic
+                String proof = zkProofService.generateAgeProof(doc);
+                
+                // 3. Return ONLY the proof (No personal data)
+                return ResponseEntity.ok(proof);
+                
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body("Proof Generation Failed: " + e.getMessage());
+            }
+        }
 }

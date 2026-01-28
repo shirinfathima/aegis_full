@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box, Container, Typography, Card, CardContent, Button, Grid, Table, 
+  Box, Typography, Card, CardContent, Button, Grid, Table, 
   TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, 
   Avatar, TextField, Tabs, Tab, Alert, Divider, List, ListItem, 
   ListItemIcon, ListItemText, IconButton, InputAdornment
@@ -13,32 +13,49 @@ import {
   Inbox as InboxIcon,
   Refresh as RefreshIcon,
   ExitToApp as LogoutIcon,
-  Search as SearchIcon,       // <--- NEW ICON
-  Lock as LockIcon            // <--- NEW ICON
+  Search as SearchIcon,
+  Lock as LockIcon,
+  Visibility as VisibilityIcon // Added Visibility Icon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { getCurrentUser, logout } from '../services/authService'; // Adjust path if needed
-import DashboardLayout from '../components/DashboardLayout';      // Adjust path if needed
-import DigitalIDCard from '../components/DigitalIDCard';          // Adjust path if needed
-import RequestAccessModal from './RequestAccessModal';            // <--- NEW COMPONENT
+import { getCurrentUser, logout } from '../services/authService'; 
+import DashboardLayout from '../components/DashboardLayout'; 
+import RequestAccessModal from './RequestAccessModal'; 
+import ProofViewerModal from '../components/ProofViewerModal'; 
+import DocumentViewerModal from '../components/DocumentViewerModal'; // Ensure path
 
 function VerifierDashboard() {
   const navigate = useNavigate();
   const [currentUser] = useState(getCurrentUser());
   const [currentTab, setCurrentTab] = useState(1); // Default to Inbox
   
-  // --- EXISTING STATE ---
+  // --- VERIFY TOOL STATE ---
   const [proofInput, setProofInput] = useState('');
   const [verificationResult, setVerificationResult] = useState(null);
+  
+  // --- INBOX STATE ---
   const [inbox, setInbox] = useState([]);
 
-  // --- NEW STATE FOR SEARCH ---
+  // --- SEARCH & REQUEST STATE ---
   const [searchEmail, setSearchEmail] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+  
+  // --- MODAL STATE ---
   const [isModalOpen, setModalOpen] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState(null);
+
+  // --- SENT REQUESTS STATE ---
+  const [sentRequests, setSentRequests] = useState([]);
+
+  // --- PROOF MODAL STATE ---
+  const [viewProofData, setViewProofData] = useState(null); 
+  const [isProofModalOpen, setIsProofModalOpen] = useState(false);
+
+  // --- DOCUMENT VIEWER STATE ---
+  const [viewRequestDoc, setViewRequestDoc] = useState(null);
+  const [isDocViewerOpen, setIsDocViewerOpen] = useState(false);
 
   useEffect(() => {
     if (!currentUser || currentUser.role.toUpperCase() !== 'VERIFIER') {
@@ -49,6 +66,13 @@ function VerifierDashboard() {
     }
   }, [currentUser, navigate]);
 
+  // --- AUTO-FETCH SENT REQUESTS WHEN TAB 2 OPENED ---
+  useEffect(() => {
+      if (currentTab === 2) {
+          fetchSentRequests();
+      }
+  }, [currentTab]);
+
   // --- HELPER: GET AUTH HEADERS ---
   const getAuthHeaders = () => {
     const password = sessionStorage.getItem('temp_pass');
@@ -58,7 +82,7 @@ function VerifierDashboard() {
     };
   };
 
-  // --- EXISTING FUNCTIONS ---
+  // --- 1. INBOX FUNCTIONS ---
   const fetchInbox = async () => {
     if(!currentUser) return;
     try {
@@ -75,6 +99,7 @@ function VerifierDashboard() {
       setTimeout(() => handleVerify(request.vpJson), 100);
   };
 
+  // --- 2. VERIFY TOOL FUNCTIONS ---
   const handleVerify = (inputJson = proofInput) => {
     setVerificationResult(null);
     try {
@@ -114,7 +139,7 @@ function VerifierDashboard() {
     }
   };
 
-  // --- NEW FUNCTIONS FOR SEARCH ---
+  // --- 3. SEARCH FUNCTIONS ---
   const handleSearchUser = async (e) => {
     e.preventDefault();
     if(!searchEmail) return;
@@ -124,7 +149,6 @@ function VerifierDashboard() {
     setSearchResults([]);
 
     try {
-        // Updated URL to match your new Controller
         const res = await fetch(`http://localhost:8080/api/verifier/search-user?email=${searchEmail}`, {
             headers: getAuthHeaders()
         });
@@ -143,6 +167,19 @@ function VerifierDashboard() {
   const openRequestModal = (doc) => {
       setSelectedDoc(doc);
       setModalOpen(true);
+  };
+
+  // --- 4. FETCH SENT REQUESTS ---
+  const fetchSentRequests = async () => {
+    if (!currentUser) return;
+    try {
+        const res = await fetch(`http://localhost:8080/api/verifier/my-requests?verifierEmail=${currentUser.email}`, {
+             headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            setSentRequests(await res.json());
+        }
+    } catch (e) { console.error(e); }
   };
 
   // --- SIDEBAR ---
@@ -180,7 +217,6 @@ function VerifierDashboard() {
           <Tabs value={currentTab} onChange={(e, v) => setCurrentTab(v)}>
             <Tab label="Verify Proof (Tool)" icon={<VerifyIcon />} iconPosition="start"/>
             <Tab label={`Inbox (${inbox.length})`} icon={<InboxIcon />} iconPosition="start"/>
-            {/* NEW TAB ADDED HERE */}
             <Tab label="Find & Request" icon={<SearchIcon />} iconPosition="start"/>
           </Tabs>
         </Box>
@@ -188,7 +224,6 @@ function VerifierDashboard() {
         {/* --- Tab 0: Verification Tool --- */}
         {currentTab === 0 && (
           <CardContent>
-             {/* ... (Your Existing Code for Tab 0) ... */}
              <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Typography variant="h6" gutterBottom>Verifiable Presentation Data</Typography>
@@ -218,7 +253,6 @@ function VerifierDashboard() {
                           </Alert>
                       )}
                       
-                      {/* Simple Data Display for success */}
                       {verificationResult.status === 'Valid' && (
                           <Paper variant="outlined" sx={{p:2}}>
                               <pre>{JSON.stringify(verificationResult.data, null, 2)}</pre>
@@ -233,7 +267,6 @@ function VerifierDashboard() {
         {/* --- Tab 1: Inbox --- */}
         {currentTab === 1 && (
             <CardContent>
-                {/* ... (Your Existing Code for Tab 1) ... */}
                 <Box sx={{display:'flex', justifyContent:'space-between', mb:2}}>
                     <Typography variant="h6">Incoming Verification Requests</Typography>
                     <IconButton onClick={fetchInbox}><RefreshIcon /></IconButton>
@@ -259,10 +292,11 @@ function VerifierDashboard() {
             </CardContent>
         )}
 
-        {/* --- Tab 2: NEW SEARCH & REQUEST --- */}
+        {/* --- Tab 2: SEARCH & REQUEST STATUS --- */}
         {currentTab === 2 && (
             <CardContent>
-                <Box sx={{ maxWidth: 600, mx: 'auto', textAlign: 'center', mb: 4 }}>
+                {/* 1. Search Section */}
+                <Box sx={{ maxWidth: 600, mx: 'auto', textAlign: 'center', mb: 6 }}>
                     <Typography variant="h6" gutterBottom>Find a User</Typography>
                     <form onSubmit={handleSearchUser} style={{ display: 'flex', gap: 10 }}>
                         <TextField 
@@ -281,54 +315,135 @@ function VerifierDashboard() {
                     {searchError && <Alert severity="warning" sx={{mt:2}}>{searchError}</Alert>}
                 </Box>
 
+                {/* 2. Search Results Grid */}
                 {searchResults.length > 0 && (
-                    <Grid container spacing={3}>
-                        {searchResults.map((doc) => (
-                            <Grid item xs={12} sm={6} md={4} key={doc.id}>
-                                <Card variant="outlined" sx={{ '&:hover': { boxShadow: 3 }, transition: '0.3s' }}>
-                                    <CardContent sx={{ textAlign: 'center' }}>
-                                        <Avatar sx={{ width: 60, height: 60, mx: 'auto', mb: 2, bgcolor: '#eef2ff', color: '#6366f1' }}>
-                                            {doc.documentType && doc.documentType.toLowerCase().includes('id') ? '🆔' : '🎓'}
-                                        </Avatar>
-                                        <Typography variant="h6">{doc.documentType}</Typography>
-                                        
-                                        <Chip 
-                                            label={doc.isVerified ? "Anchored On-Chain" : "Not Anchored"} 
-                                            color={doc.isVerified ? "success" : "warning"}
-                                            size="small"
-                                            sx={{ my: 1 }}
-                                        />
-                                        
-                                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                                            Uploaded: {doc.uploadDate ? doc.uploadDate.split('T')[0] : 'N/A'}
-                                        </Typography>
+                    <Box sx={{ mb: 6 }}>
+                        <Typography variant="h6" sx={{ mb: 2 }}>Search Results</Typography>
+                        <Grid container spacing={3}>
+                            {searchResults.map((doc) => (
+                                <Grid item xs={12} sm={6} md={4} key={doc.id}>
+                                    <Card variant="outlined">
+                                        <CardContent sx={{ textAlign: 'center' }}>
+                                            <Avatar sx={{ width: 50, height: 50, mx: 'auto', mb: 1, bgcolor: '#eef2ff' }}>
+                                                {doc.documentType && doc.documentType.includes('ID') ? '🆔' : '🎓'}
+                                            </Avatar>
+                                            <Typography variant="subtitle1">{doc.documentType}</Typography>
+                                            <Button 
+                                                variant="outlined" size="small" sx={{ mt: 2 }}
+                                                startIcon={<LockIcon />}
+                                                onClick={() => openRequestModal(doc)}
+                                            >
+                                                Request Access
+                                            </Button>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            ))}
+                        </Grid>
+                        <Divider sx={{ my: 4 }} />
+                    </Box>
+                )}
 
-                                        <Button 
-                                            variant="outlined" 
-                                            fullWidth 
-                                            startIcon={<LockIcon />}
-                                            onClick={() => openRequestModal(doc)}
-                                        >
-                                            Request Access
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                            </Grid>
-                        ))}
-                    </Grid>
+                {/* 3. My Access Requests Table */}
+                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                     My Access Requests <RefreshIcon onClick={fetchSentRequests} sx={{ cursor: 'pointer', fontSize: 20, color: 'gray' }}/>
+                </Typography>
+                
+                {sentRequests.length === 0 ? (
+                    <Alert severity="info">You haven't sent any requests yet.</Alert>
+                ) : (
+                    <TableContainer component={Paper} variant="outlined">
+                        <Table>
+                            <TableHead>
+                                <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                                    <TableCell>User</TableCell>
+                                    <TableCell>Document</TableCell>
+                                    <TableCell>Type</TableCell>
+                                    <TableCell>Status</TableCell>
+                                    <TableCell>Data</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {sentRequests.map((req) => (
+                                    <TableRow key={req.id}>
+                                        <TableCell>{req.userEmail}</TableCell>
+                                        <TableCell>{req.document?.documentName}</TableCell>
+                                        <TableCell>
+                                            <Chip label={req.accessType} size="small" variant="outlined" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Chip 
+                                                label={req.status} 
+                                                color={req.status === 'APPROVED' ? 'success' : req.status === 'PENDING' ? 'warning' : 'error'}
+                                                size="small"
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            {req.status === 'APPROVED' ? (
+                                                req.accessType === 'ZKP_AGE' ? (
+                                                    <Button 
+                                                        size="small" variant="contained" color="success"
+                                                        onClick={() => {
+                                                            setViewProofData(req.proofData);
+                                                            setIsProofModalOpen(true);
+                                                        }}
+                                                    >
+                                                        View Proof
+                                                    </Button>
+                                                ) : (
+                                                    // 👇 UPDATED: THIS BUTTON NOW WORKS!
+                                                    <Button 
+                                                        size="small" 
+                                                        variant="outlined"
+                                                        startIcon={<VisibilityIcon />}
+                                                        onClick={() => {
+                                                            setViewRequestDoc(req);
+                                                            setIsDocViewerOpen(true);
+                                                        }}
+                                                    >
+                                                        View Doc
+                                                    </Button>
+                                                )
+                                            ) : (
+                                                <Typography variant="caption" color="text.secondary">Waiting...</Typography>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
                 )}
             </CardContent>
         )}
       </Card>
 
-      {/* --- THE MODAL (Always rendered, conditional show) --- */}
+      {/* --- MODALS --- */}
+      
       <RequestAccessModal 
          isOpen={isModalOpen}
-         onClose={() => setModalOpen(false)}
+         onClose={() => {
+            setModalOpen(false);
+            fetchSentRequests(); 
+         }}
          document={selectedDoc}
          verifierEmail={currentUser?.email}
          userEmail={searchEmail}
       />
+
+      <ProofViewerModal 
+        isOpen={isProofModalOpen}
+        onClose={() => setIsProofModalOpen(false)}
+        proofData={viewProofData}
+      />
+
+      {/* 👇 ADDED THIS MODAL TO THE END 👇 */}
+      <DocumentViewerModal 
+        isOpen={isDocViewerOpen}
+        onClose={() => setIsDocViewerOpen(false)}
+        request={viewRequestDoc}
+      />
+
     </DashboardLayout>
   );
 }

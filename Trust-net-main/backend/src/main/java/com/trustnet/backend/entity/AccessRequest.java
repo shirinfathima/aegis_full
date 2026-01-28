@@ -18,20 +18,23 @@ public class AccessRequest {
     @JoinColumn(name = "document_id")
     private Document document;
 
-    // We reference the Enum defined below
     @Enumerated(EnumType.STRING)
     private RequestStatus status;
 
-    private String accessType;    // "FULL" or "REDACTED"
+    private String accessType;    // "FULL", "REDACTED", or "ZKP_AGE"
     private String allowedFields; // e.g. "Name,DOB"
 
     private LocalDateTime requestDate;
     private LocalDateTime expiryDate;
 
+    // 👇 NEW FIELD FOR ZKP PROOF 👇
+    @Column(columnDefinition = "TEXT") // Use TEXT type for large JSON strings
+    private String proofData; 
+
     // --- CONSTRUCTORS ---
     public AccessRequest() {}
 
-    // --- ENUM DEFINITION (Inside the file) ---
+    // --- ENUM DEFINITION ---
     public enum RequestStatus {
         PENDING,
         APPROVED,
@@ -49,6 +52,9 @@ public class AccessRequest {
     public String getAllowedFields() { return allowedFields; }
     public LocalDateTime getRequestDate() { return requestDate; }
     public LocalDateTime getExpiryDate() { return expiryDate; }
+    
+    // 👇 NEW GETTER 👇
+    public String getProofData() { return proofData; }
 
     // --- SETTERS ---
     public void setVerifierEmail(String verifierEmail) { this.verifierEmail = verifierEmail; }
@@ -59,4 +65,7 @@ public class AccessRequest {
     public void setAllowedFields(String allowedFields) { this.allowedFields = allowedFields; }
     public void setRequestDate(LocalDateTime requestDate) { this.requestDate = requestDate; }
     public void setExpiryDate(LocalDateTime expiryDate) { this.expiryDate = expiryDate; }
+    
+    // 👇 NEW SETTER 👇
+    public void setProofData(String proofData) { this.proofData = proofData; }
 }
