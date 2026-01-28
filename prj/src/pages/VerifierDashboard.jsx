@@ -15,14 +15,14 @@ import {
   ExitToApp as LogoutIcon,
   Search as SearchIcon,
   Lock as LockIcon,
-  Visibility as VisibilityIcon // Added Visibility Icon
+  Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout } from '../services/authService'; 
 import DashboardLayout from '../components/DashboardLayout'; 
 import RequestAccessModal from './RequestAccessModal'; 
 import ProofViewerModal from '../components/ProofViewerModal'; 
-import DocumentViewerModal from '../components/DocumentViewerModal'; // Ensure path
+import DocumentViewerModal from '../components/DocumentViewerModal'; 
 
 function VerifierDashboard() {
   const navigate = useNavigate();
@@ -80,6 +80,41 @@ function VerifierDashboard() {
         'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`),
         'Content-Type': 'application/json'
     };
+  };
+
+  // --- 🌟 NEW: HANDLE VIEW DOCUMENT WITH SECURE FETCH 🌟 ---
+  const handleViewDocument = async (request) => {
+    try {
+        // 1. Call the new secure endpoint (Backend validates Blockchain & IPFS)
+        const res = await fetch(`http://localhost:8080/api/verifier/fetch-document-content?requestId=${request.id}`, {
+            headers: getAuthHeaders()
+        });
+
+        if (!res.ok) {
+            const errMsg = await res.text();
+            alert(`Error: ${errMsg}`);
+            return;
+        }
+
+        const data = await res.json();
+
+        // 2. Merge fetched image data into the request object for the modal
+        const updatedRequest = {
+            ...request,
+            document: {
+                ...request.document,
+                fileData: data.fileData // Inject the Base64 image
+            }
+        };
+
+        // 3. Open Modal
+        setViewRequestDoc(updatedRequest);
+        setIsDocViewerOpen(true);
+
+    } catch (err) {
+        console.error(err);
+        alert("Failed to retrieve document from IPFS/Blockchain.");
+    }
   };
 
   // --- 1. INBOX FUNCTIONS ---
@@ -391,15 +426,12 @@ function VerifierDashboard() {
                                                         View Proof
                                                     </Button>
                                                 ) : (
-                                                    // 👇 UPDATED: THIS BUTTON NOW WORKS!
+                                                    // 👇 UPDATED: Uses new handleViewDocument handler
                                                     <Button 
                                                         size="small" 
                                                         variant="outlined"
                                                         startIcon={<VisibilityIcon />}
-                                                        onClick={() => {
-                                                            setViewRequestDoc(req);
-                                                            setIsDocViewerOpen(true);
-                                                        }}
+                                                        onClick={() => handleViewDocument(req)}
                                                     >
                                                         View Doc
                                                     </Button>
@@ -437,7 +469,6 @@ function VerifierDashboard() {
         proofData={viewProofData}
       />
 
-      {/* 👇 ADDED THIS MODAL TO THE END 👇 */}
       <DocumentViewerModal 
         isOpen={isDocViewerOpen}
         onClose={() => setIsDocViewerOpen(false)}

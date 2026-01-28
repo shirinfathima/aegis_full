@@ -24,6 +24,8 @@ import java.math.BigInteger;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec; // Added Import
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,7 +41,8 @@ public class UploadService {
     private static final String AES_ALGORITHM = "AES";
     private static final int AES_KEY_SIZE = 256;
     private static final String IPFS_UPLOAD_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS"; 
-
+    // Added Public Gateway URL
+    private static final String IPFS_GATEWAY_URL = "https://gateway.pinata.cloud/ipfs/";
     @Autowired
     private WebClient.Builder webClientBuilder;
 
@@ -98,6 +101,32 @@ public class UploadService {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode root = mapper.readTree(responseBody);
         return root.path("IpfsHash").asText();
+    }
+
+    // --- NEW: Download from IPFS ---
+    public byte[] downloadFromIpfs(String cid) {
+        try {
+            return webClientBuilder.build()
+                .get()
+                .uri(IPFS_GATEWAY_URL + cid)
+                .retrieve()
+                .bodyToMono(byte[].class)
+                .block();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to fetch from IPFS: " + e.getMessage());
+        }
+    }
+
+    // --- NEW: Decrypt Document ---
+    public byte[] decryptDocument(byte[] encryptedData, String encryptedKeyBase64) throws Exception {
+        // 1. Decode the Key
+        byte[] decodedKey = Base64.getDecoder().decode(encryptedKeyBase64);
+        SecretKey originalKey = new SecretKeySpec(decodedKey, 0, decodedKey.length, AES_ALGORITHM);
+
+        // 2. Decrypt
+        Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
+        cipher.init(Cipher.DECRYPT_MODE, originalKey);
+        return cipher.doFinal(encryptedData);
     }
 
     public Document processIdCard(MultipartFile frontImage, MultipartFile backImage, MultipartFile selfieImage, Long userId) throws Exception {

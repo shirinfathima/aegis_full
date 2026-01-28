@@ -103,4 +103,11 @@ public class BlockchainService {
         BigInteger timestamp = result.component2();
         return "CID: " + cid.toString() + " | Anchored at: " + timestamp.toString();
     }
+
+    // --- NEW METHOD FOR VERIFIER CONTROLLER ---
+    public BigInteger getRawAnchoredCID(Long userId) throws Exception {
+        BigInteger solUserId = BigInteger.valueOf(userId);
+        Tuple2<BigInteger, BigInteger> result = deployedContract.getDocumentCID(solUserId).send();
+        return result.component1(); // Returns the numeric Hash stored on-chain
+    }
 }

@@ -11,10 +11,18 @@ import com.trustnet.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import com.trustnet.backend.service.BlockchainService;
+import com.trustnet.backend.service.UploadService;
+import com.trustnet.backend.service.ZkHashUtils;
 import com.trustnet.backend.service.ZkProofService;
 
+import java.math.BigInteger;
+import java.util.Base64;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -34,6 +42,12 @@ public class VerifierController {
 
     @Autowired
     private ZkProofService zkProofService;
+
+    @Autowired
+    private BlockchainService blockchainService; // Added
+
+    @Autowired
+    private UploadService uploadService; // Added
 
     // --- 1. SEARCH USER DOCUMENTS ---
     @GetMapping("/search-user")
@@ -106,6 +120,53 @@ public class VerifierController {
         return ResponseEntity.ok("Successfully retrieved Verifier Dashboard data");
     }
 
+    // --- 4. NEW: SECURE DOCUMENT RETRIEVAL (IPFS + BLOCKCHAIN) ---
+    @GetMapping("/fetch-document-content")
+    public ResponseEntity<?> fetchDocumentContent(@RequestParam Long requestId) {
+        try {
+            // A. Validate Request
+            AccessRequest request = accessRequestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Request not found"));
+
+            if (request.getStatus() != AccessRequest.RequestStatus.APPROVED) {
+                return ResponseEntity.badRequest().body("Access not approved by user.");
+            }
+
+            Document doc = request.getDocument();
+            
+            // B. BLOCKCHAIN INTEGRITY CHECK
+            // Calculate the hash of the current IPFS CID stored in DB
+            BigInteger calculatedHash = ZkHashUtils.hashIpfsCid(doc.getIpfsCid());
+            
+            // Fetch the authoritative hash stored on the Blockchain
+            BigInteger blockchainHash = blockchainService.getRawAnchoredCID(doc.getUserId());
+
+            // Compare
+            if (!calculatedHash.equals(blockchainHash)) {
+                return ResponseEntity.status(409).body("BLOCKCHAIN ALERT: Document integrity check failed! The IPFS CID does not match the blockchain anchor.");
+            }
+
+            // C. FETCH FROM IPFS
+            byte[] encryptedBytes = uploadService.downloadFromIpfs(doc.getIpfsCid());
+
+            // D. DECRYPT
+            byte[] decryptedBytes = uploadService.decryptDocument(encryptedBytes, doc.getEncryptedDocumentKey());
+
+            // E. PREPARE RESPONSE (Base64 for Frontend)
+            String base64Image = Base64.getEncoder().encodeToString(decryptedBytes);
+            
+            Map<String, String> response = new HashMap<>();
+            response.put("fileName", doc.getDocumentName());
+            response.put("fileData", base64Image);
+            response.put("blockchainStatus", "VERIFIED");
+            
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().body("Error fetching document: " + e.getMessage());
+        }
+    }
     // --- NEW ZKP ENDPOINT ---
         @PostMapping("/generate-proof/age")
         public ResponseEntity<?> generateAgeProof(@RequestParam Long documentId) {
