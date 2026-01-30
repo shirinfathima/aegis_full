@@ -135,9 +135,13 @@ public class VerifierController {
             Document doc = request.getDocument();
             
             // B. BLOCKCHAIN INTEGRITY CHECK
-            // Calculate the hash of the current IPFS CID stored in DB
-            BigInteger calculatedHash = ZkHashUtils.hashIpfsCid(doc.getIpfsCid());
-            
+            // --- DELETE THIS LINE ---
+            // BigInteger calculatedHash = ZkHashUtils.hashIpfsCid(doc.getIpfsCid());
+
+            // --- ADD THIS LINE ---
+            // We must verify the VC Hash because that is what IssuerService anchored
+            BigInteger calculatedHash = new BigInteger(doc.getVcHash());
+
             // Fetch the authoritative hash stored on the Blockchain
             BigInteger blockchainHash = blockchainService.getRawAnchoredCID(doc.getUserId());
 

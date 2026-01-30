@@ -18,15 +18,12 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import com.trustnet.backend.service.ZkHashUtils;
-import java.math.BigInteger;
-
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec; // Added Import
-
+import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -40,75 +37,28 @@ public class UploadService {
 
     private static final String AES_ALGORITHM = "AES";
     private static final int AES_KEY_SIZE = 256;
-    private static final String IPFS_UPLOAD_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS"; 
-    // Added Public Gateway URL
-    private static final String IPFS_GATEWAY_URL = "https://gateway.pinata.cloud/ipfs/";
+    private static final String IPFS_UPLOAD_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
+    
     @Autowired
     private WebClient.Builder webClientBuilder;
-
     @Autowired
     private DocumentRepository documentRepository;
-
     @Autowired
-    private UserRepository userRepository; 
+    private UserRepository userRepository;
 
     @Value("${pinata.api-key}")
     private String pinataApiKey;
     @Value("${pinata.secret-api-key}")
     private String pinataSecretApiKey;
+    @Value("${pinata.dedicated-gateway}")
+    private String dedicatedGateway;
 
-    private String generateZkFriendlyCidHash(String ipfsCid) {
-        BigInteger hash = ZkHashUtils.hashIpfsCid(ipfsCid);
-        return hash.toString();
-    }
-
-    private SecretKey generateAesKey() throws Exception {
-        KeyGenerator keyGen = KeyGenerator.getInstance(AES_ALGORITHM);
-        keyGen.init(AES_KEY_SIZE, new SecureRandom());
-        return keyGen.generateKey();
-    }
-
-    private byte[] encryptBytes(byte[] rawBytes, SecretKey secretKey) throws Exception {
-        Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey);
-        return cipher.doFinal(rawBytes);
-    }
-
-    private String encryptDocumentKeyWithDidPrivateKey(SecretKey documentKey, String didPrivateKeyPlaceholder) {
-        return Base64.getEncoder().encodeToString(documentKey.getEncoded());
-    }
-
-    private String ipfsUpload(byte[] encryptedBytes, String fileName) throws Exception {
-        ByteArrayResource resource = new ByteArrayResource(encryptedBytes) {
-            @Override
-            public String getFilename() { return fileName; }
-        };
-        
-        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", resource);
-
-        String responseBody = webClientBuilder.build()
-            .post()
-            .uri(IPFS_UPLOAD_URL)
-            .header("pinata_api_key", pinataApiKey) 
-            .header("pinata_secret_api_key", pinataSecretApiKey)
-            .contentType(MediaType.MULTIPART_FORM_DATA)
-            .body(BodyInserters.fromMultipartData(body))
-            .retrieve()
-            .bodyToMono(String.class)
-            .block();
-        
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode root = mapper.readTree(responseBody);
-        return root.path("IpfsHash").asText();
-    }
-
-    // --- NEW: Download from IPFS ---
+    // --- 1. DOWNLOAD FROM DEDICATED GATEWAY (Fixes Timeouts) ---
     public byte[] downloadFromIpfs(String cid) {
         try {
             return webClientBuilder.build()
                 .get()
-                .uri(IPFS_GATEWAY_URL + cid)
+                .uri(dedicatedGateway + cid)
                 .retrieve()
                 .bodyToMono(byte[].class)
                 .block();
@@ -117,18 +67,16 @@ public class UploadService {
         }
     }
 
-    // --- NEW: Decrypt Document ---
+    // --- 2. DECRYPT DOCUMENT ---
     public byte[] decryptDocument(byte[] encryptedData, String encryptedKeyBase64) throws Exception {
-        // 1. Decode the Key
         byte[] decodedKey = Base64.getDecoder().decode(encryptedKeyBase64);
         SecretKey originalKey = new SecretKeySpec(decodedKey, 0, decodedKey.length, AES_ALGORITHM);
-
-        // 2. Decrypt
         Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
         cipher.init(Cipher.DECRYPT_MODE, originalKey);
         return cipher.doFinal(encryptedData);
     }
 
+    // --- 3. UPLOAD & PROCESS LOGIC ---
     public Document processIdCard(MultipartFile frontImage, MultipartFile backImage, MultipartFile selfieImage, Long userId) throws Exception {
         Optional<User> userOptional = userRepository.findById(userId);
         if (userOptional.isEmpty()) throw new Exception("User not found: " + userId);
@@ -182,11 +130,9 @@ public class UploadService {
                 .ipfsCid(ipfsCid) 
                 .vcHash(cidHash)
                 .encryptedDocumentKey(encryptedDocumentKey)
-                // --- ADD THESE 3 LINES ---
-                .tempDocData(frontImageBytes)      // Save Front ID to DB
-                .tempDocBackData(backImageBytes)   // Save Back ID to DB
-                .tempSelfieData(selfieImageBytes)  // Save Selfie to DB
-                // -------------------------
+                .tempDocData(frontImageBytes)      
+                .tempDocBackData(backImageBytes)   
+                .tempSelfieData(selfieImageBytes)  
                 .build();
 
             return documentRepository.save(document);
@@ -194,23 +140,64 @@ public class UploadService {
         } catch (Exception e) {
             throw new RuntimeException("Processing failed: " + e.getMessage(), e);
         } finally {
-            // Robust cleanup in finally block to ensure files are released
             cleanupFiles(frontPath, backPath, selfiePath);
         }
     }
+    
+    // --- HELPER METHODS ---
+    private String generateZkFriendlyCidHash(String ipfsCid) {
+        BigInteger hash = ZkHashUtils.hashIpfsCid(ipfsCid);
+        return hash.toString();
+    }
+
+    private SecretKey generateAesKey() throws Exception {
+        KeyGenerator keyGen = KeyGenerator.getInstance(AES_ALGORITHM);
+        keyGen.init(AES_KEY_SIZE, new SecureRandom());
+        return keyGen.generateKey();
+    }
+
+    private byte[] encryptBytes(byte[] rawBytes, SecretKey secretKey) throws Exception {
+        Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+        return cipher.doFinal(rawBytes);
+    }
+
+    private String encryptDocumentKeyWithDidPrivateKey(SecretKey documentKey, String didPrivateKeyPlaceholder) {
+        return Base64.getEncoder().encodeToString(documentKey.getEncoded());
+    }
+
+    private String ipfsUpload(byte[] encryptedBytes, String fileName) throws Exception {
+        ByteArrayResource resource = new ByteArrayResource(encryptedBytes) {
+            @Override
+            public String getFilename() { return fileName; }
+        };
+        
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", resource);
+
+        String responseBody = webClientBuilder.build()
+            .post()
+            .uri(IPFS_UPLOAD_URL)
+            .header("pinata_api_key", pinataApiKey) 
+            .header("pinata_secret_api_key", pinataSecretApiKey)
+            .contentType(MediaType.MULTIPART_FORM_DATA)
+            .body(BodyInserters.fromMultipartData(body))
+            .retrieve()
+            .bodyToMono(String.class)
+            .block();
+        
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode root = mapper.readTree(responseBody);
+        return root.path("IpfsHash").asText();
+    }
 
     private void cleanupFiles(Path... paths) {
-        // Suggest garbage collection to help release file handles held by WebClient/OS
         System.gc(); 
         for (Path path : paths) {
             try {
-                if (path != null) {
-                    Files.deleteIfExists(path);
-                }
+                if (path != null) Files.deleteIfExists(path);
             } catch (IOException e) {
-                // If it fails, mark it for deletion when the JVM exits as a fallback
                 path.toFile().deleteOnExit();
-                System.err.println("Cleanup failed for " + path + ": " + e.getMessage());
             }
         }
     }
