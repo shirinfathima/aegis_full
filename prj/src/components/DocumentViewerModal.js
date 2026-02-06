@@ -1,18 +1,26 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Dialog, DialogContent, DialogTitle, Typography, Box, 
   Chip, Divider, Button, Grid, Paper, Tooltip, Alert 
 } from '@mui/material';
 import { 
   Visibility, VisibilityOff, Description, 
-  VerifiedUser, GppGood 
+  VerifiedUser, GppGood, FlipCameraAndroid 
 } from '@mui/icons-material';
 
 const DocumentViewerModal = ({ isOpen, onClose, request }) => {
+  const [viewSide, setViewSide] = useState('front'); // State to track which side is shown
+
+  // Reset to front view whenever the modal opens or request changes
+  useEffect(() => {
+    if (isOpen) setViewSide('front');
+  }, [isOpen, request]);
+
   if (!request || !request.document) return null;
 
   const { accessType, allowedFields, document, verifierEmail } = request;
   const isRedacted = accessType === 'REDACTED';
+  const hasBackImage = !!document.fileDataBack; // Check if back image exists
 
   // --- 1. PARSE OCR DATA ---
   let ocrData = {};
@@ -37,6 +45,11 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
     Address: isFieldAllowed('Address') ? (ocrData.back?.address || "123 Tech Street") : "REDACTED"
   };
 
+  // Determine current image source based on toggle state
+  const currentImageSrc = viewSide === 'front' 
+    ? document.fileData 
+    : document.fileDataBack;
+
   return (
     <Dialog open={isOpen} onClose={onClose} maxWidth="md" fullWidth>
       {/* HEADER */}
@@ -58,9 +71,23 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
             
             {/* --- LEFT: DOCUMENT IMAGE (With Watermark & Stamp) --- */}
             <Grid item xs={12} md={7}>
-                <Typography variant="subtitle2" gutterBottom sx={{color:'text.secondary'}}>
-                    OFFICIAL DOCUMENT RECORD
-                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="subtitle2" sx={{color:'text.secondary'}}>
+                        OFFICIAL RECORD ({viewSide.toUpperCase()})
+                    </Typography>
+                    
+                    {/* FLIP BUTTON */}
+                    {hasBackImage && (!isRedacted || isFieldAllowed('Photo')) && (
+                        <Button 
+                            size="small" 
+                            startIcon={<FlipCameraAndroid />} 
+                            onClick={() => setViewSide(prev => prev === 'front' ? 'back' : 'front')}
+                            variant="outlined"
+                        >
+                            Flip to {viewSide === 'front' ? 'Back' : 'Front'}
+                        </Button>
+                    )}
+                </Box>
                 
                 <Paper 
                     variant="outlined" 
@@ -77,19 +104,20 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
                 >
                     {(!isRedacted || isFieldAllowed('Photo')) ? (
                         <>
-                            {/* A. THE IMAGE (Uses base64 from backend) */}
+                            {/* A. THE IMAGE (Toggles based on state) */}
                             <img 
-                                src={document.fileData ? `data:image/png;base64,${document.fileData}` : "https://via.placeholder.com/500x350?text=Secure+Document+Image"} 
+                                key={viewSide} // Forces re-render on flip
+                                src={currentImageSrc ? `data:image/png;base64,${currentImageSrc}` : "https://via.placeholder.com/500x350?text=Image+Not+Found"} 
                                 alt="Document" 
                                 style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
                             />
 
-                            {/* B. THE DIGITAL STAMP (Top Right) */}
+                            {/* B. THE DIGITAL STAMP (Only on Front usually, but we keep on both for now) */}
                             <Tooltip title={`Digitally Signed by Issuer: ${document.issuerEmail || 'TrustNet Authority'}`}>
                                 <Box sx={{
                                     position: 'absolute',
                                     top: 15, right: 15,
-                                    bgcolor: 'rgba(255, 215, 0, 0.9)', // Gold color
+                                    bgcolor: 'rgba(255, 215, 0, 0.9)', 
                                     color: '#5c3a00',
                                     border: '2px solid #fff',
                                     borderRadius: '50%',
@@ -110,7 +138,7 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
                                 </Box>
                             </Tooltip>
 
-                            {/* C. THE WATERMARK (Repeated Pattern) */}
+                            {/* C. THE WATERMARK */}
                             <Box sx={{
                                 position: 'absolute',
                                 inset: 0,
@@ -118,7 +146,7 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
                                 zIndex: 5,
                                 display: 'flex',
                                 flexWrap: 'wrap',
-                                opacity: 0.15, // Low opacity so you can still read the doc
+                                opacity: 0.15, 
                                 transform: 'rotate(-25deg) scale(1.5)',
                                 overflow: 'hidden'
                             }}>

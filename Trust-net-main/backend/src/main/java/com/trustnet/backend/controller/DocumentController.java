@@ -25,27 +25,38 @@ public class DocumentController {
     @Autowired
     private UploadService uploadService;
 
-    // --- 1. Get User's own documents (Existing Logic) ---
+    // --- 1. Get User's own documents ---
     @GetMapping("/my-documents")
     @Transactional(readOnly = true)
     public ResponseEntity<List<Document>> getUserDocuments(@AuthenticationPrincipal User user) {
-        // Spring Security provides the logged-in user context
         List<Document> documents = documentRepository.findByUserId(user.getId());
         return ResponseEntity.ok(documents);
     }
 
-    // --- 2. Decrypt and View Document (New Logic for Verifiers) ---
+    // --- 2. Decrypt and View Document (SECURE & ZIP AWARE) ---
     @GetMapping("/view/{id}")
-    public ResponseEntity<byte[]> viewDocument(@PathVariable Long id) {
+    public ResponseEntity<byte[]> viewDocument(
+            @PathVariable Long id, 
+            @RequestParam(defaultValue = "front") String side, // Support for 'front' or 'back'
+            @AuthenticationPrincipal User user                 // Inject User for Security
+    ) {
         try {
             Document doc = documentRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Document not found"));
 
-            // Uses the dedicated gateway from your application.properties to bypass timeouts
-            byte[] encryptedBytes = uploadService.downloadFromIpfs(doc.getIpfsCid());
+            // SECURITY FIX: Ensure the requester OWNS this document
+            if (!doc.getUserId().equals(user.getId())) {
+                 return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
 
-            // Decrypt the ID using the AES key stored during upload
-            byte[] decryptedBytes = uploadService.decryptDocument(encryptedBytes, doc.getEncryptedDocumentKey());
+            // 1. Download ZIP from IPFS
+            byte[] zipBytes = uploadService.downloadFromIpfs(doc.getIpfsCid());
+
+            // 2. Extract specific side (front/back)
+            byte[] encryptedImageBytes = uploadService.extractEncryptedImage(zipBytes, side);
+
+            // 3. Decrypt
+            byte[] decryptedBytes = uploadService.decryptDocument(encryptedImageBytes, doc.getEncryptedDocumentKey());
 
             return ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_JPEG)

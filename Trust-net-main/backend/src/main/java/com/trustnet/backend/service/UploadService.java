@@ -22,6 +22,8 @@ import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayInputStream; // Added
+import java.io.ByteArrayOutputStream; // Added
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;
@@ -31,6 +33,9 @@ import java.nio.file.StandardOpenOption;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Optional;
+import java.util.zip.ZipEntry; // Added
+import java.util.zip.ZipInputStream; // Added
+import java.util.zip.ZipOutputStream; // Added
 
 @Service
 public class UploadService {
@@ -53,7 +58,7 @@ public class UploadService {
     @Value("${pinata.dedicated-gateway}")
     private String dedicatedGateway;
 
-    // --- 1. DOWNLOAD FROM DEDICATED GATEWAY (Fixes Timeouts) ---
+    // --- 1. DOWNLOAD FROM DEDICATED GATEWAY ---
     public byte[] downloadFromIpfs(String cid) {
         try {
             return webClientBuilder.build()
@@ -65,6 +70,19 @@ public class UploadService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to fetch from IPFS: " + e.getMessage());
         }
+    }
+
+    // --- NEW: Helper to extract specific image from ZIP ---
+    public byte[] extractEncryptedImage(byte[] zipData, String side) throws IOException {
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipData))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.getName().equalsIgnoreCase(side)) {
+                    return zis.readAllBytes();
+                }
+            }
+        }
+        throw new IOException("Image side '" + side + "' not found in IPFS document.");
     }
 
     // --- 2. DECRYPT DOCUMENT ---
@@ -112,9 +130,25 @@ public class UploadService {
             byte[] encryptedFrontBytes = encryptBytes(frontImageBytes, documentAesKey);
             byte[] encryptedBackBytes = encryptBytes(backImageBytes, documentAesKey);
 
-            byte[] combinedEncryptedBytes = new byte[encryptedFrontBytes.length + encryptedBackBytes.length];
-            System.arraycopy(encryptedFrontBytes, 0, combinedEncryptedBytes, 0, encryptedFrontBytes.length);
-            System.arraycopy(encryptedBackBytes, 0, combinedEncryptedBytes, encryptedFrontBytes.length, encryptedBackBytes.length);
+            // --- ZIP LOGIC: Store both images safely ---
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            try (ZipOutputStream zos = new ZipOutputStream(baos)) {
+                // Entry 1: Front
+                ZipEntry front = new ZipEntry("front");
+                front.setSize(encryptedFrontBytes.length);
+                zos.putNextEntry(front);
+                zos.write(encryptedFrontBytes);
+                zos.closeEntry();
+
+                // Entry 2: Back
+                ZipEntry back = new ZipEntry("back");
+                back.setSize(encryptedBackBytes.length);
+                zos.putNextEntry(back);
+                zos.write(encryptedBackBytes);
+                zos.closeEntry();
+            }
+            byte[] combinedEncryptedBytes = baos.toByteArray();
+            // -------------------------------------------
 
             String ipfsCid = ipfsUpload(combinedEncryptedBytes, frontImageName + "_encrypted.zip");
             String cidHash = generateZkFriendlyCidHash(ipfsCid);
@@ -128,7 +162,7 @@ public class UploadService {
                 .faceMatchConfidence(confidence)
                 .status(VerificationStatus.PENDING)
                 .ipfsCid(ipfsCid) 
-                .vcHash(cidHash)
+                .vcHash(cidHash) // Note: This is temp hash. Issuer will overwrite with real VC Hash.
                 .encryptedDocumentKey(encryptedDocumentKey)
                 .tempDocData(frontImageBytes)      
                 .tempDocBackData(backImageBytes)   

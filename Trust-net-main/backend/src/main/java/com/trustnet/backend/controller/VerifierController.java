@@ -44,10 +44,10 @@ public class VerifierController {
     private ZkProofService zkProofService;
 
     @Autowired
-    private BlockchainService blockchainService; // Added
+    private BlockchainService blockchainService;
 
     @Autowired
-    private UploadService uploadService; // Added
+    private UploadService uploadService;
 
     // --- 1. SEARCH USER DOCUMENTS ---
     @GetMapping("/search-user")
@@ -58,19 +58,12 @@ public class VerifierController {
             return ResponseEntity.badRequest().body("User not found with email: " + email);
         }
 
-        // We use the user's ID to find documents
         List<Document> docs = documentRepository.findByUserId(user.getId());
 
-        // --- NULL-SAFE CONVERSION FIX ---
         List<DocumentMetadataDTO> safeList = docs.stream()
                 .map(doc -> {
-                    // 1. Handle missing Document Type
                     String safeType = (doc.getDocumentType() != null) ? doc.getDocumentType() : "Document";
-                    
-                    // 2. Handle missing Upload Time (THIS WAS CAUSING YOUR CRASH)
                     String safeDate = (doc.getUploadTime() != null) ? doc.getUploadTime().toString() : "Unknown Date";
-
-                    // 3. Handle missing Transaction Hash
                     boolean isAnchored = (doc.getTxHash() != null && !doc.getTxHash().isEmpty());
 
                     return new DocumentMetadataDTO(
@@ -100,7 +93,6 @@ public class VerifierController {
         newRequest.setAccessType(requestDto.getAccessType());
         newRequest.setAllowedFields(requestDto.getAllowedFields());
         
-        // Use the Enum from inside AccessRequest
         newRequest.setStatus(AccessRequest.RequestStatus.PENDING);
         newRequest.setRequestDate(LocalDateTime.now());
 
@@ -120,7 +112,7 @@ public class VerifierController {
         return ResponseEntity.ok("Successfully retrieved Verifier Dashboard data");
     }
 
-    // --- 4. NEW: SECURE DOCUMENT RETRIEVAL (IPFS + BLOCKCHAIN) ---
+    // --- 4. SECURE DOCUMENT RETRIEVAL (UPDATED: Returns Front AND Back) ---
     @GetMapping("/fetch-document-content")
     public ResponseEntity<?> fetchDocumentContent(@RequestParam Long requestId) {
         try {
@@ -135,33 +127,40 @@ public class VerifierController {
             Document doc = request.getDocument();
             
             // B. BLOCKCHAIN INTEGRITY CHECK
-            // --- DELETE THIS LINE ---
-            // BigInteger calculatedHash = ZkHashUtils.hashIpfsCid(doc.getIpfsCid());
-
-            // --- ADD THIS LINE ---
-            // We must verify the VC Hash because that is what IssuerService anchored
+            if (doc.getVcHash() == null) {
+                return ResponseEntity.status(409).body("Integrity Error: Document has not been approved/anchored yet.");
+            }
+            
             BigInteger calculatedHash = new BigInteger(doc.getVcHash());
-
-            // Fetch the authoritative hash stored on the Blockchain
             BigInteger blockchainHash = blockchainService.getRawAnchoredCID(doc.getUserId());
 
-            // Compare
             if (!calculatedHash.equals(blockchainHash)) {
-                return ResponseEntity.status(409).body("BLOCKCHAIN ALERT: Document integrity check failed! The IPFS CID does not match the blockchain anchor.");
+                return ResponseEntity.status(409).body("BLOCKCHAIN ALERT: Document integrity check failed!");
             }
 
-            // C. FETCH FROM IPFS
-            byte[] encryptedBytes = uploadService.downloadFromIpfs(doc.getIpfsCid());
-
-            // D. DECRYPT
-            byte[] decryptedBytes = uploadService.decryptDocument(encryptedBytes, doc.getEncryptedDocumentKey());
-
-            // E. PREPARE RESPONSE (Base64 for Frontend)
-            String base64Image = Base64.getEncoder().encodeToString(decryptedBytes);
+            // C. FETCH & EXTRACT FROM ZIP
+            byte[] zipBytes = uploadService.downloadFromIpfs(doc.getIpfsCid());
             
+            // 1. EXTRACT FRONT IMAGE (Standard)
+            byte[] frontEncrypted = uploadService.extractEncryptedImage(zipBytes, "front");
+            byte[] frontDecrypted = uploadService.decryptDocument(frontEncrypted, doc.getEncryptedDocumentKey());
+            String frontBase64 = Base64.getEncoder().encodeToString(frontDecrypted);
+
+            // 2. EXTRACT BACK IMAGE (Optional - might not exist on old docs)
+            String backBase64 = null;
+            try {
+                byte[] backEncrypted = uploadService.extractEncryptedImage(zipBytes, "back");
+                byte[] backDecrypted = uploadService.decryptDocument(backEncrypted, doc.getEncryptedDocumentKey());
+                backBase64 = Base64.getEncoder().encodeToString(backDecrypted);
+            } catch (Exception e) {
+                System.out.println("Back image not found (legacy document?): " + e.getMessage());
+            }
+
+            // E. PREPARE RESPONSE
             Map<String, String> response = new HashMap<>();
             response.put("fileName", doc.getDocumentName());
-            response.put("fileData", base64Image);
+            response.put("fileData", frontBase64);      // Key for Front Image
+            response.put("fileDataBack", backBase64);   // Key for Back Image
             response.put("blockchainStatus", "VERIFIED");
             
             return ResponseEntity.ok(response);
@@ -171,22 +170,19 @@ public class VerifierController {
             return ResponseEntity.internalServerError().body("Error fetching document: " + e.getMessage());
         }
     }
-    // --- NEW ZKP ENDPOINT ---
-        @PostMapping("/generate-proof/age")
-        public ResponseEntity<?> generateAgeProof(@RequestParam Long documentId) {
-            try {
-                // 1. Fetch the private document (Backend access only)
-                Document doc = documentRepository.findById(documentId)
-                    .orElseThrow(() -> new RuntimeException("Document not found"));
-                    
-                // 2. Run the ZK Logic
-                String proof = zkProofService.generateAgeProof(doc);
+    
+    // --- 5. ZKP ENDPOINT ---
+    @PostMapping("/generate-proof/age")
+    public ResponseEntity<?> generateAgeProof(@RequestParam Long documentId) {
+        try {
+            Document doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new RuntimeException("Document not found"));
                 
-                // 3. Return ONLY the proof (No personal data)
-                return ResponseEntity.ok(proof);
-                
-            } catch (Exception e) {
-                return ResponseEntity.badRequest().body("Proof Generation Failed: " + e.getMessage());
-            }
+            String proof = zkProofService.generateAgeProof(doc);
+            return ResponseEntity.ok(proof);
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Proof Generation Failed: " + e.getMessage());
         }
+    }
 }

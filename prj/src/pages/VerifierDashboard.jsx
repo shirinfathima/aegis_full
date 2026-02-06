@@ -103,7 +103,8 @@ function VerifierDashboard() {
             ...request,
             document: {
                 ...request.document,
-                fileData: data.fileData // Inject the Base64 image
+                fileData: data.fileData,         // Inject Front Image
+                fileDataBack: data.fileDataBack  // <--- ADDED: Inject Back Image
             }
         };
 
@@ -426,7 +427,7 @@ function VerifierDashboard() {
                                                         View Proof
                                                     </Button>
                                                 ) : (
-                                                    // 👇 UPDATED: Uses new handleViewDocument handler
+                                                    // Updated Button
                                                     <Button 
                                                         size="small" 
                                                         variant="outlined"
