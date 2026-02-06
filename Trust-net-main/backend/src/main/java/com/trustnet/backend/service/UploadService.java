@@ -95,7 +95,7 @@ public class UploadService {
     }
 
     // --- 3. UPLOAD & PROCESS LOGIC ---
-    public Document processIdCard(MultipartFile frontImage, MultipartFile backImage, MultipartFile selfieImage, Long userId) throws Exception {
+    public Document processIdCard(MultipartFile frontImage, MultipartFile backImage, MultipartFile selfieImage, Long userId, Long issuerId) throws Exception {
         Optional<User> userOptional = userRepository.findById(userId);
         if (userOptional.isEmpty()) throw new Exception("User not found: " + userId);
         User user = userOptional.get();
@@ -156,6 +156,7 @@ public class UploadService {
             
             Document document = Document.builder()
                 .userId(userId)
+                .issuerId(issuerId)
                 .documentName(frontImageName)
                 .selfieName(selfieName)
                 .ocrData(combinedOcr)

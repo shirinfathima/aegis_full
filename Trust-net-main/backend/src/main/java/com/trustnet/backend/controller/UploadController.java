@@ -21,9 +21,10 @@ public class UploadController {
             @RequestParam("frontImage") MultipartFile frontImage,
             @RequestParam("backImage") MultipartFile backImage,
             @RequestParam("selfieImage") MultipartFile selfieImage,
+            @RequestParam("issuerId") Long issuerId,
             @AuthenticationPrincipal User user) {
         try {
-            Document savedDocument = uploadService.processIdCard(frontImage, backImage, selfieImage, user.getId());
+            Document savedDocument = uploadService.processIdCard(frontImage, backImage, selfieImage, user.getId(), issuerId);
             return savedDocument != null ? ResponseEntity.ok(savedDocument) : ResponseEntity.status(500).build();
         } catch (Exception e) {
             e.printStackTrace();

@@ -5,6 +5,7 @@ import com.trustnet.backend.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity; 
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 
 // --- INBOX FEATURE IMPORTS ---
 import com.trustnet.backend.DTO.RequestResponseDTO;
@@ -58,6 +59,10 @@ public class UserController {
     public ResponseEntity<?> login(@RequestBody User user){ 
         Object result = userService.loginUser(user);
         return (result instanceof User) ? ResponseEntity.ok(result) : ResponseEntity.status(401).body(result); 
+    }
+    @GetMapping("/issuers")
+    public ResponseEntity<List<User>> getIssuers() {
+        return ResponseEntity.ok(userService.getAllIssuers());
     }
 
 

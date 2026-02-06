@@ -22,11 +22,12 @@ const getAuthHeaders = () => {
 /**
  * Uploads ID documents for verification (Existing Logic)
  */
-export const uploadIdCard = async (frontFile, backFile, selfieFile) => {
+export const uploadIdCard = async (frontFile, backFile, selfieFile, issuerId) => {
     const formData = new FormData();
     formData.append('frontImage', frontFile);
     formData.append('backImage', backFile);
     formData.append('selfieImage', selfieFile);
+    formData.append('issuerId', issuerId);
 
     const response = await fetch(`${API_URL}/upload/id-card`, {
         method: 'POST',

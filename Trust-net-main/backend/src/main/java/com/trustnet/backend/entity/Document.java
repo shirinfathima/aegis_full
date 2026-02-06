@@ -61,8 +61,9 @@ public class Document {
     private String verifiableCredential;
     
     private String vcHash; 
-    private String blockchainTransactionHash;
-    private String anchoringTime;
+    private String blockchainTransactionHash;// To store the blockchain transaction hash for proof of anchoring
+    private String anchoringTime;// NEW FIELD: To store the timestamp of when the document was anchored on-chain
+    private Long issuerId; // Field to store the ID of the selected issuer
 
     @Transient // Tells Database: "Do not save this!"
     private byte[] fileData;
