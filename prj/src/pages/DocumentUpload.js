@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
+  Stack,
   Container,
   Typography,
-  Card,
   CardContent,
   Button,
   Grid,
@@ -11,16 +11,16 @@ import {
   Paper,
   LinearProgress,
   TextField,
-  Autocomplete // IMPORT Autocomplete
+  Autocomplete
 } from '@mui/material';
 import {
-  CloudUpload as UploadIcon,
   CheckCircle as CheckIcon,
   Article as ArticleIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { uploadIdCard } from '../services/documentService';
 import { getCurrentUser, getStoredPassword } from '../services/authService';
+import { GlassCard, gradients } from '../styles/ModernComponents';
 
 const API_URL = 'http://localhost:8080/api';
 
@@ -111,44 +111,63 @@ function DocumentUpload() {
   const FileUploadBox = ({ file, onSelect, title, inputId }) => (
     <Paper
       sx={{ 
-        border: '2px dashed #ccc', 
-        p: 3, 
+        border: '2px dashed',
+        borderColor: file ? 'transparent' : 'rgba(102, 126, 234, 0.3)',
+        background: file ? gradients.green : 'rgba(255, 255, 255, 0.5)',
+        backdropFilter: 'blur(10px)',
+        p: 4, 
         textAlign: 'center', 
-        cursor: 'pointer', 
-        backgroundColor: file ? '#f5f5f5' : 'transparent', 
-        '&:hover': { backgroundColor: '#f9f9f9' }
+        cursor: 'pointer',
+        borderRadius: '16px',
+        transition: 'all 0.3s ease-in-out',
+        '&:hover': { 
+          transform: 'translateY(-4px)',
+          boxShadow: '0 12px 30px rgba(102, 126, 234, 0.15)',
+          borderColor: 'rgba(102, 126, 234, 0.5)',
+        }
       }}
       onClick={() => document.getElementById(inputId).click()}
     >
       <input id={inputId} type="file" accept=".jpg,.jpeg,.png" onChange={onSelect} style={{ display: 'none' }} />
       {file ? (
-        <Box>
-          <CheckIcon color="success" sx={{ fontSize: 48, mb: 2 }} />
-          <Typography variant="h6">{file.name}</Typography>
-          <Typography variant="body2" color="text.secondary">{(file.size / 1024 / 1024).toFixed(2)} MB</Typography>
-        </Box>
+        <Stack spacing={2} alignItems="center">
+          <CheckIcon sx={{ fontSize: 56, color: 'white' }} />
+          <Typography variant="h6" fontWeight={700} sx={{ color: 'white' }}>{file.name}</Typography>
+          <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.9)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</Typography>
+        </Stack>
       ) : (
-        <Box>
-          <ArticleIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary">{title}</Typography>
-        </Box>
+        <Stack spacing={2} alignItems="center">
+          <ArticleIcon sx={{ fontSize: 56, color: '#667eea' }} />
+          <Typography variant="h6" color="text.secondary" fontWeight={600}>{title}</Typography>
+        </Stack>
       )}
     </Paper>
   );
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <UploadIcon /> Document Upload
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Upload your ID and assign it to an issuer for verification.
-        </Typography>
-      </Box>
+      <Stack spacing={4}>
+        <Box>
+          <Typography 
+            variant="h3" 
+            fontWeight={700}
+            sx={{ 
+              mb: 1,
+              background: gradients.purple,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            Document Upload
+          </Typography>
+          <Typography variant="h6" color="text.secondary" fontWeight={400}>
+            Upload your ID and assign it to an issuer for verification
+          </Typography>
+        </Box>
 
-      <Card>
-        <CardContent>
+      <GlassCard>
+        <CardContent sx={{ p: 4 }}>
           {/* SEARCHABLE ISSUER BOX */}
           <Box sx={{ mb: 4 }}>
             <Autocomplete
@@ -189,23 +208,51 @@ function DocumentUpload() {
             </Grid>
           </Grid>
           
-          {error && <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>}
-          {isProcessing && <LinearProgress sx={{ mt: 3 }} />}
+          {error && (
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mt: 3,
+                borderRadius: '12px',
+                backdropFilter: 'blur(10px)',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+              }}
+            >
+              {error}
+            </Alert>
+          )}
+          {isProcessing && <LinearProgress sx={{ mt: 3, borderRadius: '4px', height: 6 }} />}
 
-          <Box sx={{ mt: 3, textAlign: 'center' }}>
+          <Box sx={{ mt: 4, textAlign: 'center' }}>
             <Button
               variant="contained"
               size="large"
               onClick={handleSubmit}
               disabled={!frontFile || !backFile || !selectedIssuer || isProcessing}
               startIcon={<CheckIcon />}
-              sx={{ py: 1.5, px: 5 }}
+              sx={{
+                background: gradients.purple,
+                fontWeight: 600,
+                py: 1.5,
+                px: 5,
+                borderRadius: '12px',
+                boxShadow: '0 10px 30px rgba(102, 126, 234, 0.3)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #5568d3 0%, #6a3f93 100%)',
+                  boxShadow: '0 15px 40px rgba(102, 126, 234, 0.4)',
+                },
+                '&:disabled': {
+                  background: 'rgba(102, 126, 234, 0.3)',
+                }
+              }}
             >
               {isProcessing ? 'Submitting...' : 'Submit for Verification'}
             </Button>
           </Box>
         </CardContent>
-      </Card>
+      </GlassCard>
+      </Stack>
     </Container>
   );
 }

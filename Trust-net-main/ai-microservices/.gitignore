@@ -1,0 +1,18 @@
+# Python specific ignores for AI microservices
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore all virtual environments in these subfolders
+trustnet-face-venv/
+trustnet-liveness-venv/
+trustnet-ocr-venv/
+
+# General Python env folders
+venv/
+env/
+*-venv/
+
+# Local configuration or sensitive files
+.env
+.python-version

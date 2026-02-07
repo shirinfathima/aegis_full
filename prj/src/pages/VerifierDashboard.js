@@ -1,10 +1,9 @@
 // This file is complete and includes DigitalIDCard, Verify Tool, and Online Inbox
 import React, { useState, useEffect } from 'react';
 import {
-  Box, Container, Typography, Card, CardContent, Button, Grid, Table, 
+  Box, Stack, Typography, CardContent, Button, Table, 
   TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, 
-  Avatar, TextField, Tabs, Tab, Alert, Divider, List, ListItem, 
-  ListItemIcon, ListItemText, IconButton
+  TextField, Tabs, Tab, Alert, IconButton, Grid, Divider
 } from '@mui/material';
 import {
   VerifiedUser as VerifierIcon,
@@ -18,7 +17,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout } from '../services/authService';
 import DashboardLayout from '../components/DashboardLayout';
-import DigitalIDCard from '../components/DigitalIDCard'; // <--- ADDED
+import DigitalIDCard from '../components/DigitalIDCard';
+import { ModernCard, GlassCard, gradients } from '../styles/ModernComponents';
 
 function VerifierDashboard() {
   const navigate = useNavigate();
@@ -29,16 +29,7 @@ function VerifierDashboard() {
   const [verificationResult, setVerificationResult] = useState(null);
   const [inbox, setInbox] = useState([]);
 
-  useEffect(() => {
-    if (!currentUser || currentUser.role.toUpperCase() !== 'VERIFIER') {
-      navigate('/'); 
-    }
-    if (currentUser?.role === 'VERIFIER') {
-        fetchInbox();
-    }
-  }, [currentUser, navigate]);
-
-  const fetchInbox = async () => {
+  const handleFetchInbox = async () => {
     const password = sessionStorage.getItem('temp_pass'); 
     if(!currentUser) return;
     try {
@@ -48,6 +39,17 @@ function VerifierDashboard() {
         if(res.ok) setInbox(await res.json());
     } catch(e) { console.error(e); }
   };
+
+  useEffect(() => {
+    if (!currentUser || currentUser.role.toUpperCase() !== 'VERIFIER') {
+      navigate('/'); 
+    }
+    if (currentUser?.role === 'VERIFIER') {
+        handleFetchInbox();
+    }
+  }, [currentUser, navigate]);
+
+
 
   const handleReviewRequest = (request) => {
       setProofInput(request.vpJson);
@@ -98,35 +100,88 @@ function VerifierDashboard() {
   };
 
   const verifierSidebar = (
-    <Box>
-      <Card sx={{ mb: 3 }}>
-        <CardContent sx={{ textAlign: 'center' }}>
-          <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'secondary.main' }}>
-            <VerifierIcon sx={{ fontSize: 40 }} />
-          </Avatar>
-          <Typography variant="h6">{currentUser?.name}</Typography>
-          <Chip label="VERIFIER" color="secondary" size="small" sx={{mt:1}}/>
+    <Stack spacing={3}>
+      <ModernCard gradient={gradients.cyan}>
+        <Stack alignItems="center" spacing={2}>
+          <Box
+            sx={{
+              width: 80,
+              height: 80,
+              borderRadius: '50%',
+              background: 'rgba(255, 255, 255, 0.2)',
+              backdropFilter: 'blur(10px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '3px solid rgba(255, 255, 255, 0.3)',
+            }}
+          >
+            <VerifierIcon sx={{ fontSize: 40, color: 'white' }} />
+          </Box>
+          <Box textAlign="center">
+            <Typography variant="h6" sx={{ color: 'white', fontWeight: 700, mb: 0.5 }}>
+              {currentUser?.name}
+            </Typography>
+            <Chip 
+              label="VERIFIER" 
+              sx={{ 
+                bgcolor: 'rgba(255, 255, 255, 0.2)',
+                color: 'white',
+                fontWeight: 700,
+                borderRadius: '8px',
+                backdropFilter: 'blur(10px)',
+              }}
+            />
+          </Box>
+        </Stack>
+      </ModernCard>
+
+      <GlassCard>
+        <CardContent sx={{ py: 1.5, px: 2 }}>
+          <Button
+            fullWidth
+            startIcon={<LogoutIcon />}
+            onClick={() => { logout(); navigate('/'); }}
+            sx={{ 
+              color: '#dc2626',
+              fontWeight: 600,
+              justifyContent: 'flex-start',
+              py: 1,
+              '&:hover': {
+                bgcolor: 'rgba(220, 38, 38, 0.1)',
+              }
+            }}
+          >
+            Logout
+          </Button>
         </CardContent>
-      </Card>
-      <Card>
-        <List>
-          <ListItem button onClick={() => { logout(); navigate('/'); }}>
-            <ListItemIcon><LogoutIcon color="error" /></ListItemIcon>
-            <ListItemText primary="Logout" />
-          </ListItem>
-        </List>
-      </Card>
-    </Box>
+      </GlassCard>
+    </Stack>
   );
 
   return (
     <DashboardLayout sidebar={verifierSidebar}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4">Verifier Portal</Typography>
-        <Typography color="text.secondary">Validate digital credentials securely</Typography>
-      </Box>
+      <Stack spacing={4}>
+        <Box>
+          <Typography 
+            variant="h3" 
+            fontWeight={700}
+            sx={{ 
+              mb: 1,
+              background: gradients.cyan,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            Verifier Portal
+          </Typography>
+          <Typography variant="h6" color="text.secondary" fontWeight={400}>
+            Validate digital credentials securely
+          </Typography>
+        </Box>
 
-      <Card>
+      <GlassCard sx={{ overflow: 'hidden' }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={currentTab} onChange={(e, v) => setCurrentTab(v)}>
             <Tab label="Verify Proof (Tool)" icon={<VerifyIcon />} iconPosition="start"/>
@@ -216,7 +271,7 @@ function VerifierDashboard() {
             <CardContent>
                 <Box sx={{display:'flex', justifyContent:'space-between', mb:2}}>
                     <Typography variant="h6">Incoming Verification Requests</Typography>
-                    <IconButton onClick={fetchInbox}><RefreshIcon /></IconButton>
+                    <IconButton onClick={handleFetchInbox}><RefreshIcon /></IconButton>
                 </Box>
                 
                 {inbox.length === 0 ? (
@@ -250,7 +305,8 @@ function VerifierDashboard() {
                 )}
             </CardContent>
         )}
-      </Card>
+      </GlassCard>
+      </Stack>
     </DashboardLayout>
   );
 }

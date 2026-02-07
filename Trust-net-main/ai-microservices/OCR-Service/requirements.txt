@@ -1,7 +1,20 @@
-opencv-python==4.10.0.84
-pytesseract==0.3.13
-spacy==3.7.2
-numpy==1.26.4
-jsonschema==4.22.0
-imutils==0.5.4
-flask
+# requirements.txt for the Flask OCR Service
+
+# Image Processing and Computer Vision
+# OpenCV Python bindings (used for image loading, preprocessing, and manipulation)
+opencv-python
+
+# Optical Character Recognition (OCR)
+# Python wrapper for Google's Tesseract-OCR Engine
+pytesseract
+
+# Web Server and API
+# A lightweight WSGI web application framework
+Flask
+
+# Library to handle Cross-Origin Resource Sharing (CORS)
+# Required for frontend applications (like a web app) to access the API
+Flask-CORS
+
+# Utility for array manipulation (used by OpenCV to handle image data)
+numpy
