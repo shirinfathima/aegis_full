@@ -12,6 +12,7 @@ import com.trustnet.backend.DTO.RequestResponseDTO;
 import com.trustnet.backend.entity.AccessRequest;
 import com.trustnet.backend.repository.AccessRequestRepository;
 import com.trustnet.backend.repository.UserRepository;
+import com.trustnet.backend.model.Role; 
 
 // --- ZKP GENERATION IMPORTS ---
 import com.trustnet.backend.service.ZkProofService;
@@ -60,15 +61,21 @@ public class UserController {
         Object result = userService.loginUser(user);
         return (result instanceof User) ? ResponseEntity.ok(result) : ResponseEntity.status(401).body(result); 
     }
+    
     @GetMapping("/issuers")
     public ResponseEntity<List<User>> getIssuers() {
         return ResponseEntity.ok(userService.getAllIssuers());
     }
 
+    // 👇 NEW ENDPOINT: Fetch all Verifiers for the dropdown
+    @GetMapping("/verifiers")
+    public ResponseEntity<List<User>> getVerifiers() {
+        return ResponseEntity.ok(userRepository.findByRole(Role.VERIFIER));
+    }
 
     // --- INBOX METHODS ---
 
-    // 1. GET PENDING REQUESTS (⚠️ UPDATED WITH BRIDGE LOGIC ⚠️)
+    // 1. GET PENDING REQUESTS
     @GetMapping("/requests")
     public ResponseEntity<?> getMyRequests(@RequestParam String email) {
         // Fetch all requests from DB
@@ -141,10 +148,8 @@ public class UserController {
         }
     }
 
-   // ... inside UserController class ...
-
-    // 👇 ROBUST IPFS FETCH METHOD (Replaces your old one)
-  private byte[] fetchFileFromIPFS(String ipfsHash) {
+    // 👇 ROBUST IPFS FETCH METHOD
+    private byte[] fetchFileFromIPFS(String ipfsHash) {
         // 1. List of gateways to try
         String[] gateways = {
             "https://gateway.pinata.cloud/ipfs/", // Usually very reliable
@@ -183,9 +188,7 @@ public class UserController {
         // 3. 🚨 EMERGENCY FALLBACK (If all internet options fail) 🚨
         System.err.println("⚠️ All IPFS Gateways failed. Using DEMO FALLBACK image.");
         try {
-            // This is a simple 1x1 Grey Pixel (Base64) or you can put a real Base64 string of an ID card here
-            // Converting a small placeholder text to bytes so the frontend has *something* to display
-            // Ideally, replace this string with a real Base64 string of a dummy ID card for a better demo
+            // This is a simple 1x1 Grey Pixel (Base64)
             String dummyImage = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
             return java.util.Base64.getDecoder().decode(dummyImage);
         } catch (Exception e) {

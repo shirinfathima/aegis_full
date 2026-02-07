@@ -23,6 +23,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import RequestAccessModal from './RequestAccessModal'; 
 import ProofViewerModal from '../components/ProofViewerModal'; 
 import DocumentViewerModal from '../components/DocumentViewerModal'; 
+import DigitalIDCard from '../components/DigitalIDCard'; 
 
 function VerifierDashboard() {
   const navigate = useNavigate();
@@ -32,6 +33,7 @@ function VerifierDashboard() {
   // --- VERIFY TOOL STATE ---
   const [proofInput, setProofInput] = useState('');
   const [verificationResult, setVerificationResult] = useState(null);
+  const [activeInboxRequest, setActiveInboxRequest] = useState(null); 
   
   // --- INBOX STATE ---
   const [inbox, setInbox] = useState([]);
@@ -82,10 +84,13 @@ function VerifierDashboard() {
     };
   };
 
-  // --- 🌟 NEW: HANDLE VIEW DOCUMENT WITH SECURE FETCH 🌟 ---
+  // --- HANDLE VIEW DOCUMENT WITH SECURE FETCH ---
   const handleViewDocument = async (request) => {
+    if (!request || !request.id) {
+        alert("No valid request ID found to fetch document.");
+        return;
+    }
     try {
-        // 1. Call the new secure endpoint (Backend validates Blockchain & IPFS)
         const res = await fetch(`http://localhost:8080/api/verifier/fetch-document-content?requestId=${request.id}`, {
             headers: getAuthHeaders()
         });
@@ -98,17 +103,15 @@ function VerifierDashboard() {
 
         const data = await res.json();
 
-        // 2. Merge fetched image data into the request object for the modal
         const updatedRequest = {
             ...request,
             document: {
                 ...request.document,
-                fileData: data.fileData,         // Inject Front Image
-                fileDataBack: data.fileDataBack  // <--- ADDED: Inject Back Image
+                fileData: data.fileData,         
+                fileDataBack: data.fileDataBack  
             }
         };
 
-        // 3. Open Modal
         setViewRequestDoc(updatedRequest);
         setIsDocViewerOpen(true);
 
@@ -122,17 +125,22 @@ function VerifierDashboard() {
   const fetchInbox = async () => {
     if(!currentUser) return;
     try {
-        const res = await fetch('http://localhost:8080/api/verifier/inbox', {
+        const res = await fetch(`http://localhost:8080/api/verifier/inbox?verifierEmail=${currentUser.email}`, {
              headers: getAuthHeaders()
         });
-        if(res.ok) setInbox(await res.json());
+        if(res.ok) {
+            const data = await res.json();
+            data.sort((a, b) => new Date(b.requestDate) - new Date(a.requestDate));
+            setInbox(data);
+        }
     } catch(e) { console.error(e); }
   };
 
   const handleReviewRequest = (request) => {
-      setProofInput(request.vpJson);
+      setActiveInboxRequest(request); 
+      setProofInput(request.proofData);
       setCurrentTab(0); // Switch to Verify Tool
-      setTimeout(() => handleVerify(request.vpJson), 100);
+      setTimeout(() => handleVerify(request.proofData), 100);
   };
 
   // --- 2. VERIFY TOOL FUNCTIONS ---
@@ -156,6 +164,10 @@ function VerifierDashboard() {
         } else if (vp.type.includes("AgeVerificationProof")) {
             type = "Selective Disclosure (Age Proof)";
             resultData = vp.proof.disclosedAttributes;
+        } else if (vp.type.includes("RedactedDisclosure")) {
+            type = "Redacted Document";
+            const credential = vp.verifiableCredential[0];
+            resultData = credential.credentialSubject.claims;
         }
 
         setVerificationResult({
@@ -213,7 +225,9 @@ function VerifierDashboard() {
              headers: getAuthHeaders()
         });
         if (res.ok) {
-            setSentRequests(await res.json());
+            const data = await res.json();
+            data.sort((a, b) => new Date(b.requestDate) - new Date(a.requestDate));
+            setSentRequests(data);
         }
     } catch (e) { console.error(e); }
   };
@@ -267,7 +281,10 @@ function VerifierDashboard() {
                   fullWidth multiline rows={4}
                   placeholder='Paste JSON Proof here...'
                   value={proofInput}
-                  onChange={(e) => setProofInput(e.target.value)}
+                  onChange={(e) => {
+                      setProofInput(e.target.value);
+                      setActiveInboxRequest(null); 
+                  }}
                   sx={{fontFamily: 'monospace', bgcolor: '#f8f9fa'}}
                 />
                 <Button variant="contained" size="large" sx={{ mt: 2 }} onClick={() => handleVerify()} startIcon={<VerifierIcon />}>
@@ -290,9 +307,56 @@ function VerifierDashboard() {
                       )}
                       
                       {verificationResult.status === 'Valid' && (
-                          <Paper variant="outlined" sx={{p:2}}>
-                              <pre>{JSON.stringify(verificationResult.data, null, 2)}</pre>
-                          </Paper>
+                        <Box>
+                            {/* 1. If it's a Full Identity Doc, Show the Friendly Card */}
+                            {verificationResult.type === 'Full Identity Document' && verificationResult.rawVP.verifiableCredential && (
+                                <Box sx={{ mb: 3, display:'flex', justifyContent:'center' }}>
+                                    <DigitalIDCard vcData={verificationResult.rawVP.verifiableCredential[0]} />
+                                </Box>
+                            )}
+                            
+                            {/* 2. Show Action Button based on Type */}
+                            {activeInboxRequest && (
+                                <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
+                                    <Alert severity="info" sx={{ flexGrow: 1 }}>
+                                        Proof linked to Inbox Request. 
+                                    </Alert>
+                                    
+                                    {/* 👇 LOGIC CHANGE: Only show Original Images for Full Disclosure */}
+                                    {verificationResult.type === 'Full Identity Document' ? (
+                                        <Button 
+                                            variant="contained" 
+                                            color="primary"
+                                            startIcon={<VisibilityIcon />}
+                                            onClick={() => handleViewDocument(activeInboxRequest)}
+                                        >
+                                            View Original Images
+                                        </Button>
+                                    ) : (
+                                        // For ZKP/Redacted, show Proof Data only
+                                        <Button 
+                                            variant="contained" 
+                                            color="success"
+                                            startIcon={<LockIcon />}
+                                            onClick={() => {
+                                                setViewProofData(activeInboxRequest.proofData);
+                                                setIsProofModalOpen(true);
+                                            }}
+                                        >
+                                            View Proof Details
+                                        </Button>
+                                    )}
+                                </Box>
+                            )}
+
+                            {/* 3. Raw Data Fallback */}
+                            <Paper variant="outlined" sx={{p:2, mt: 2}}>
+                                <Typography variant="subtitle1" sx={{fontWeight:'bold', mb:1}}>
+                                    Decoded Data (JSON)
+                                </Typography>
+                                <pre>{JSON.stringify(verificationResult.data, null, 2)}</pre>
+                            </Paper>
+                        </Box>
                       )}
                   </Grid>
               )}
@@ -310,14 +374,17 @@ function VerifierDashboard() {
                 {inbox.length === 0 ? <Alert severity="info">No pending online requests.</Alert> : (
                     <TableContainer component={Paper}>
                         <Table>
-                            <TableHead><TableRow><TableCell>From</TableCell><TableCell>Document</TableCell><TableCell>Action</TableCell></TableRow></TableHead>
+                            <TableHead><TableRow><TableCell>From User</TableCell><TableCell>Document Type</TableCell><TableCell>Access Type</TableCell><TableCell>Action</TableCell></TableRow></TableHead>
                             <TableBody>
                                 {inbox.map((req) => (
                                     <TableRow key={req.id}>
-                                        <TableCell>{req.senderEmail}</TableCell>
-                                        <TableCell>{req.documentName}</TableCell>
+                                        <TableCell>{req.userEmail}</TableCell>
+                                        <TableCell>{req.document?.documentName}</TableCell>
                                         <TableCell>
-                                            <Button variant="contained" size="small" onClick={() => handleReviewRequest(req)}>Verify</Button>
+                                            <Chip size="small" label={req.accessType || 'UNKNOWN'} color="primary" variant="outlined" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button variant="contained" size="small" onClick={() => handleReviewRequest(req)}>Verify Proof</Button>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -361,7 +428,7 @@ function VerifierDashboard() {
                                     <Card variant="outlined">
                                         <CardContent sx={{ textAlign: 'center' }}>
                                             <Avatar sx={{ width: 50, height: 50, mx: 'auto', mb: 1, bgcolor: '#eef2ff' }}>
-                                                {doc.documentType && doc.documentType.includes('ID') ? '🆔' : '🎓'}
+                                                {doc.documentType && doc.documentType.includes('ID') ? '' : '雌'}
                                             </Avatar>
                                             <Typography variant="subtitle1">{doc.documentType}</Typography>
                                             <Button 
@@ -427,7 +494,6 @@ function VerifierDashboard() {
                                                         View Proof
                                                     </Button>
                                                 ) : (
-                                                    // Updated Button
                                                     <Button 
                                                         size="small" 
                                                         variant="outlined"

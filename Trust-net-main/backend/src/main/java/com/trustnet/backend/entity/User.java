@@ -43,7 +43,8 @@ public class User implements UserDetails { // Implement UserDetails
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority(role.name()));
+        // 👇 FIX: Add "ROLE_" prefix so hasRole("USER") works correctly
+        return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
     }
 
     @Override

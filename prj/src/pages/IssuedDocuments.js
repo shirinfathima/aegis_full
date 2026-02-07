@@ -1,4 +1,3 @@
-// This file is complete and includes DigitalIDCard, QR code, and Online Send
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -34,7 +33,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, getStoredPassword } from '../services/authService';
 import QRCode from 'react-qr-code';
-import DigitalIDCard from '../components/DigitalIDCard'; // <--- ADDED
+import DigitalIDCard from '../components/DigitalIDCard'; 
 
 function IssuedDocuments() {
   const navigate = useNavigate();
@@ -42,12 +41,18 @@ function IssuedDocuments() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   
+  // --- VERIFIER SELECTION STATE ---
+  const [verifiers, setVerifiers] = useState([]);
+  const [selectedVerifier, setSelectedVerifier] = useState('');
+  // -------------------------------
+
   const [isSharingOpen, setIsSharingOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [disclosureType, setDisclosureType] = useState('full'); 
   const [proofResult, setProofResult] = useState(null);
   const [viewMode, setViewMode] = useState(0);
 
+  // Helper to calculate age from DD-MM-YYYY
   const calculateAge = (dobString) => {
     if (!dobString) return null;
     try {
@@ -77,6 +82,7 @@ function IssuedDocuments() {
     }
 
     try {
+      // 1. Fetch User's Documents
       const response = await fetch('http://localhost:8080/api/documents/my-documents', {
         headers: {
           'Authorization': 'Basic ' + btoa(`${currentUser.email}:${storedPassword}`) 
@@ -93,6 +99,18 @@ function IssuedDocuments() {
       const data = await response.json();
       const issuedDocs = data.filter(doc => doc.status === 'APPROVED' && doc.verifiableCredential);
       setDocuments(issuedDocs);
+
+      // 2. Fetch Available Verifiers for the Dropdown
+      const verifierResponse = await fetch('http://localhost:8080/api/user/verifiers', {
+        headers: {
+          'Authorization': 'Basic ' + btoa(`${currentUser.email}:${storedPassword}`) 
+        }
+      });
+      if (verifierResponse.ok) {
+        const verifierData = await verifierResponse.json();
+        setVerifiers(verifierData);
+      }
+
     } catch (err) {
       setError(err.message);
     } finally {
@@ -108,6 +126,7 @@ function IssuedDocuments() {
     setSelectedDocument(document);
     setDisclosureType('full'); 
     setProofResult(null); 
+    setSelectedVerifier(''); // Reset verifier selection
     setIsSharingOpen(true);
     setViewMode(0);
   };
@@ -129,14 +148,28 @@ function IssuedDocuments() {
         let verifiablePresentation;
         let disclosureMessage;
 
-        if (disclosureType === 'age_proof') {
+        // --- OPTION 1: ZKP (Age Only) ---
+        if (disclosureType === 'zkp') {
             const age = calculateAge(dob);
             const isOver21 = age !== null && age >= 21;
             
             disclosureMessage = isOver21 
-                ? "Verified: Holder is over 21 years old." 
-                : "Verification Failed: Holder is under 21.";
+                ? "ZKP Generated: Proven age > 21 without revealing DOB." 
+                : "ZKP Warning: Age verification failed (Under 21).";
             
+            // 1. Define the Raw Mathematical Proof (Mocked for Demo)
+            const rawZkProof = {
+                "curve": "bn128",
+                "scheme": "groth16",
+                "a": ["0x1a2b3c4d5e6f...", "0x4d5e6f7a8b9c..."],
+                "b": [
+                    ["0x7a8b9c0d1e2f...", "0x0d1e2f3a4b5c..."],
+                    ["0x3a4b5c6d7e8f...", "0x6d7e8f9a8b7c..."]
+                ],
+                "c": ["0x9a8b7c6d5e4f...", "0x6d5e4f3a2b1c..."]
+            };
+
+            // 2. Embed it inside the Verifiable Presentation
             verifiablePresentation = {
                 "@context": ["https://www.w3.org/2018/credentials/v1"],
                 "type": ["VerifiablePresentation", "AgeVerificationProof"],
@@ -144,14 +177,12 @@ function IssuedDocuments() {
                 "proof": {
                     "type": "ZeroKnowledgeProof",
                     "created": new Date().toISOString(),
-                    "proofValue": `mock-zkp-over-21-${isOver21 ? 'TRUE' : 'FALSE'}_DID:${currentUser.did.substring(14, 20)}`,
+                    "proofValue": isOver21 ? rawZkProof : "INVALID-PROOF-FAILED-CHECK",
                     "disclosedAttributes": { "age_over_21": isOver21 }
                 },
                 "verifiableCredential": [
-                    { 
-                        "id": "urn:uuid:selective-disclosure-proof",
-                        "claims": { "ageVerification": isOver21, "documentType": selectedDocument.documentName } 
-                    } 
+                   // Masked credential used for ZKP context
+                   { "id": "urn:uuid:masked-credential", "proofType": "ZKP" }
                 ]
             };
 
@@ -161,6 +192,37 @@ function IssuedDocuments() {
                 presentation: JSON.stringify(verifiablePresentation, null, 2)
             });
 
+        // --- OPTION 2: REDACTED (Selective Disclosure) ---
+        } else if (disclosureType === 'redacted') {
+             disclosureMessage = "Redacted View Generated (Sensitive fields hidden).";
+             
+             // Create a deep copy to redact
+             const redactedVc = JSON.parse(JSON.stringify(vcJson));
+             // Redact sensitive fields
+             if(redactedVc.credentialSubject.claims.front) {
+                 delete redactedVc.credentialSubject.claims.front['ID Number'];
+                 delete redactedVc.credentialSubject.claims.front['Address'];
+             }
+
+             verifiablePresentation = {
+                "@context": ["https://www.w3.org/2018/credentials/v1"],
+                "type": ["VerifiablePresentation", "RedactedDisclosure"],
+                "holder": currentUser.did,
+                "proof": {
+                    "type": "JsonWebSignature2020",
+                    "created": new Date().toISOString(),
+                    "jws": "redacted-signature-mock"
+                },
+                "verifiableCredential": [redactedVc] 
+            };
+            
+            setProofResult({
+                status: 'Success',
+                message: disclosureMessage,
+                presentation: JSON.stringify(verifiablePresentation, null, 2)
+            });
+
+        // --- OPTION 3: FULL (Standard) ---
         } else {
             const mockSignature = `mock-signature-by-DID:${currentUser.did.substring(14, 20)}...`;
             
@@ -179,7 +241,7 @@ function IssuedDocuments() {
             
             setProofResult({
                 status: 'Success',
-                message: 'Identity Verified. Ready to Share.',
+                message: 'Full Identity Document ready to share.',
                 presentation: JSON.stringify(verifiablePresentation, null, 2)
             });
         }
@@ -195,6 +257,10 @@ function IssuedDocuments() {
     const password = getStoredPassword();
 
     if (!proofResult || !proofResult.presentation) return;
+    if (!selectedVerifier) {
+        alert("Please select a verifier from the list first.");
+        return;
+    }
 
     try {
       const response = await fetch('http://localhost:8080/api/verifier/submit-proof', {
@@ -204,16 +270,21 @@ function IssuedDocuments() {
           'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`)
         },
         body: JSON.stringify({
+          verifierEmail: selectedVerifier, // Send to selected verifier
+          userEmail: currentUser.email,
+          documentId: selectedDocument.id,
           documentName: selectedDocument.documentName,
+          accessType: disclosureType.toUpperCase(), // FULL, REDACTED, ZKP
           vpJson: proofResult.presentation
         })
       });
 
       if (response.ok) {
-        alert("Proof sent successfully! The Verifier can now see it in their dashboard.");
+        alert(`Proof successfully sent to ${selectedVerifier}!`);
         setIsSharingOpen(false);
       } else {
-        throw new Error("Failed to send proof");
+        const errText = await response.text();
+        throw new Error(errText || "Failed to send proof");
       }
     } catch (e) {
       alert(e.message);
@@ -289,8 +360,9 @@ function IssuedDocuments() {
                 setProofResult(null);
               }}
             >
-              <MenuItem value="full">Full Identity (Passport/Official)</MenuItem>
-              <MenuItem value="age_proof">Age Only (buying restricted items)</MenuItem>
+              <MenuItem value="full">Full Disclosure (Standard)</MenuItem>
+              <MenuItem value="redacted">Redacted (Hide Sensitive Fields)</MenuItem>
+              <MenuItem value="zkp">Zero Knowledge Proof (Age Only)</MenuItem>
             </Select>
           </FormControl>
 
@@ -315,6 +387,22 @@ function IssuedDocuments() {
 
                {/* Action Buttons: Online vs In-Person */}
                <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12}>
+                    <FormControl fullWidth sx={{ mb: 1 }}>
+                        <InputLabel>Select Verifier to Send To</InputLabel>
+                        <Select
+                            value={selectedVerifier}
+                            label="Select Verifier to Send To"
+                            onChange={(e) => setSelectedVerifier(e.target.value)}
+                        >
+                            {verifiers.map((v) => (
+                                <MenuItem key={v.id} value={v.email}>
+                                    {v.name} ({v.email})
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </Grid>
                 <Grid item xs={6}>
                    <Button
                       variant="contained"
@@ -322,6 +410,7 @@ function IssuedDocuments() {
                       fullWidth
                       startIcon={<SendIcon />}
                       onClick={handleOnlineSend}
+                      disabled={!selectedVerifier}
                     >
                       Send Online
                     </Button>

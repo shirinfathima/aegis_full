@@ -101,10 +101,23 @@ public class VerifierController {
         return ResponseEntity.ok("Access request sent successfully!");
     }
     
-    // --- 3. VIEW REQUESTS ---
+    // --- 3. VIEW OUTGOING REQUESTS (Verifier Initiated) ---
     @GetMapping("/my-requests")
     public ResponseEntity<List<AccessRequest>> getMyRequests(@RequestParam String verifierEmail) {
         return ResponseEntity.ok(accessRequestRepository.findByVerifierEmail(verifierEmail));
+    }
+
+    // --- 👇 NEW: INBOX ENDPOINT (User Sent Proofs) 👇 ---
+    @GetMapping("/inbox")
+    public ResponseEntity<List<AccessRequest>> getInbox(@RequestParam String verifierEmail) {
+        List<AccessRequest> allRequests = accessRequestRepository.findByVerifierEmail(verifierEmail);
+        
+        // Filter for requests that are APPROVED (User sent them) and have Proof Data
+        List<AccessRequest> inbox = allRequests.stream()
+            .filter(r -> r.getStatus() == AccessRequest.RequestStatus.APPROVED && r.getProofData() != null)
+            .collect(Collectors.toList());
+            
+        return ResponseEntity.ok(inbox);
     }
     
     @GetMapping("/dashboard-data")
@@ -112,7 +125,7 @@ public class VerifierController {
         return ResponseEntity.ok("Successfully retrieved Verifier Dashboard data");
     }
 
-    // --- 4. SECURE DOCUMENT RETRIEVAL (UPDATED: Returns Front AND Back) ---
+    // --- 4. SECURE DOCUMENT RETRIEVAL ---
     @GetMapping("/fetch-document-content")
     public ResponseEntity<?> fetchDocumentContent(@RequestParam Long requestId) {
         try {
@@ -146,7 +159,7 @@ public class VerifierController {
             byte[] frontDecrypted = uploadService.decryptDocument(frontEncrypted, doc.getEncryptedDocumentKey());
             String frontBase64 = Base64.getEncoder().encodeToString(frontDecrypted);
 
-            // 2. EXTRACT BACK IMAGE (Optional - might not exist on old docs)
+            // 2. EXTRACT BACK IMAGE (Optional)
             String backBase64 = null;
             try {
                 byte[] backEncrypted = uploadService.extractEncryptedImage(zipBytes, "back");
@@ -183,6 +196,38 @@ public class VerifierController {
             
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Proof Generation Failed: " + e.getMessage());
+        }
+    }
+
+    // --- 6. SUBMIT PROOF ENDPOINT ---
+    @PostMapping("/submit-proof")
+    public ResponseEntity<?> submitProof(@RequestBody Map<String, Object> payload) {
+        try {
+            String verifierEmail = (String) payload.get("verifierEmail");
+            String userEmail = (String) payload.get("userEmail"); 
+            Long documentId = Long.valueOf(payload.get("documentId").toString());
+            String accessType = (String) payload.get("accessType"); 
+            String proofData = (String) payload.get("vpJson");
+
+            if(verifierEmail == null || documentId == null) {
+                return ResponseEntity.badRequest().body("Missing required fields");
+            }
+
+            AccessRequest request = new AccessRequest();
+            request.setVerifierEmail(verifierEmail);
+            request.setUserEmail(userEmail);
+            request.setDocument(documentRepository.findById(documentId).orElseThrow(() -> new RuntimeException("Doc not found")));
+            request.setStatus(AccessRequest.RequestStatus.APPROVED);
+            request.setAccessType(accessType);
+            request.setProofData(proofData);
+            request.setRequestDate(LocalDateTime.now());
+            request.setExpiryDate(LocalDateTime.now().plusHours(24));
+            
+            accessRequestRepository.save(request);
+            
+            return ResponseEntity.ok("Proof submitted successfully to " + verifierEmail);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error submitting proof: " + e.getMessage());
         }
     }
 }
