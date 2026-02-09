@@ -19,6 +19,8 @@ import {
   TextField,
   Tabs,
   Tab,
+  Chip,
+  Stack,
   Paper
 } from '@mui/material';
 import {
@@ -28,7 +30,8 @@ import {
   Person as PersonIcon,
   QrCode as QrIcon,
   Code as CodeIcon,
-  Send as SendIcon
+  Send as SendIcon,
+  Check as CheckIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, getStoredPassword } from '../services/authService';
@@ -51,6 +54,9 @@ function IssuedDocuments() {
   const [disclosureType, setDisclosureType] = useState('full'); 
   const [proofResult, setProofResult] = useState(null);
   const [viewMode, setViewMode] = useState(0);
+  // 👇 NEW: State for Redaction Fields (Default to all selected)
+  const ALL_FIELDS = ['Name', 'Date of Birth', 'Reg No', 'Photo', 'Address'];
+  const [selectedFields, setSelectedFields] = useState(ALL_FIELDS);
 
   // Helper to calculate age from DD-MM-YYYY
   const calculateAge = (dobString) => {
@@ -127,8 +133,18 @@ function IssuedDocuments() {
     setDisclosureType('full'); 
     setProofResult(null); 
     setSelectedVerifier(''); // Reset verifier selection
+    setSelectedFields(ALL_FIELDS); // Reset fields
     setIsSharingOpen(true);
     setViewMode(0);
+  };
+  // 👇 NEW: Toggle Field Logic
+  const toggleField = (field) => {
+    if (selectedFields.includes(field)) {
+      setSelectedFields(selectedFields.filter(f => f !== field));
+    } else {
+      setSelectedFields([...selectedFields, field]);
+    }
+    setProofResult(null); // Reset proof if selection changes
   };
   
   const handleGenerateProof = () => {
@@ -198,11 +214,25 @@ function IssuedDocuments() {
              
              // Create a deep copy to redact
              const redactedVc = JSON.parse(JSON.stringify(vcJson));
-             // Redact sensitive fields
-             if(redactedVc.credentialSubject.claims.front) {
-                 delete redactedVc.credentialSubject.claims.front['ID Number'];
-                 delete redactedVc.credentialSubject.claims.front['Address'];
-             }
+             // 👇 FIX: Dynamic Redaction based on selectedFields
+             // Mapping UI Labels to VC JSON Keys
+             const fieldMap = {
+                 'Reg No': 'ID Number',
+                 'Date of Birth': 'Date of Birth', // Or 'DOB' depending on your OCR
+                 'Address': 'Address',
+                 'Name': 'Name'
+             };
+
+             const frontClaims = redactedVc.credentialSubject.claims.front || {};
+             const backClaims = redactedVc.credentialSubject.claims.back || {};
+
+             // Remove fields NOT in selectedFields
+             Object.entries(fieldMap).forEach(([uiLabel, jsonKey]) => {
+                 if (!selectedFields.includes(uiLabel)) {
+                     delete frontClaims[jsonKey];
+                     delete backClaims[jsonKey];
+                 }
+             });
 
              verifiablePresentation = {
                 "@context": ["https://www.w3.org/2018/credentials/v1"],
@@ -261,6 +291,13 @@ function IssuedDocuments() {
         alert("Please select a verifier from the list first.");
         return;
     }
+    // FIX: Define allowed fields for Redacted mode (Matches the redaction logic in handleGenerateProof)
+    let fieldsToSend = "ALL";
+    if (disclosureType === 'redacted') {
+        fieldsToSend = selectedFields.join(',');
+    } else if (disclosureType === 'zkp') {
+        fieldsToSend = "AGE_CHECK_ONLY";
+    }
 
     try {
       const response = await fetch('http://localhost:8080/api/verifier/submit-proof', {
@@ -275,7 +312,8 @@ function IssuedDocuments() {
           documentId: selectedDocument.id,
           documentName: selectedDocument.documentName,
           accessType: disclosureType.toUpperCase(), // FULL, REDACTED, ZKP
-          vpJson: proofResult.presentation
+          vpJson: proofResult.presentation,
+          allowedFields: fieldsToSend
         })
       });
 
@@ -365,7 +403,29 @@ function IssuedDocuments() {
               <MenuItem value="zkp">Zero Knowledge Proof (Age Only)</MenuItem>
             </Select>
           </FormControl>
-
+          
+          {/* 👇 NEW: Redaction Selection UI */}
+          {disclosureType === 'redacted' && (
+              <Box sx={{ mb: 3, p: 2, bgcolor: '#fff3e0', borderRadius: 2 }}>
+                  <Typography variant="caption" fontWeight="bold" display="block" sx={{mb: 1}}>
+                      TAP FIELDS TO SHARE:
+                  </Typography>
+                  <Stack direction="row" flexWrap="wrap" gap={1}>
+                      {ALL_FIELDS.map(field => (
+                          <Chip 
+                              key={field} 
+                              label={field} 
+                              onClick={() => toggleField(field)}
+                              color={selectedFields.includes(field) ? "primary" : "default"}
+                              variant={selectedFields.includes(field) ? "filled" : "outlined"}
+                              icon={selectedFields.includes(field) ? <CheckIcon /> : undefined}
+                              clickable
+                          />
+                      ))}
+                  </Stack>
+              </Box>
+          )}
+          
           {!proofResult && (
              <Button
                 variant="contained"

@@ -15,7 +15,8 @@ import {
   ExitToApp as LogoutIcon,
   Search as SearchIcon,
   Lock as LockIcon,
-  Visibility as VisibilityIcon
+  Visibility as VisibilityIcon,
+  ArrowBack as ArrowBackIcon // Added for the reset button
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout } from '../services/authService'; 
@@ -68,14 +69,12 @@ function VerifierDashboard() {
     }
   }, [currentUser, navigate]);
 
-  // --- AUTO-FETCH SENT REQUESTS WHEN TAB 2 OPENED ---
   useEffect(() => {
       if (currentTab === 2) {
           fetchSentRequests();
       }
   }, [currentTab]);
 
-  // --- HELPER: GET AUTH HEADERS ---
   const getAuthHeaders = () => {
     const password = sessionStorage.getItem('temp_pass');
     return { 
@@ -84,7 +83,6 @@ function VerifierDashboard() {
     };
   };
 
-  // --- HANDLE VIEW DOCUMENT WITH SECURE FETCH ---
   const handleViewDocument = async (request) => {
     if (!request || !request.id) {
         alert("No valid request ID found to fetch document.");
@@ -121,7 +119,6 @@ function VerifierDashboard() {
     }
   };
 
-  // --- 1. INBOX FUNCTIONS ---
   const fetchInbox = async () => {
     if(!currentUser) return;
     try {
@@ -143,7 +140,13 @@ function VerifierDashboard() {
       setTimeout(() => handleVerify(request.proofData), 100);
   };
 
-  // --- 2. VERIFY TOOL FUNCTIONS ---
+  // --- NEW: Reset Helper ---
+  const handleResetVerification = () => {
+      setVerificationResult(null);
+      setProofInput('');
+      setActiveInboxRequest(null);
+  };
+
   const handleVerify = (inputJson = proofInput) => {
     setVerificationResult(null);
     try {
@@ -187,7 +190,6 @@ function VerifierDashboard() {
     }
   };
 
-  // --- 3. SEARCH FUNCTIONS ---
   const handleSearchUser = async (e) => {
     e.preventDefault();
     if(!searchEmail) return;
@@ -217,7 +219,6 @@ function VerifierDashboard() {
       setModalOpen(true);
   };
 
-  // --- 4. FETCH SENT REQUESTS ---
   const fetchSentRequests = async () => {
     if (!currentUser) return;
     try {
@@ -232,7 +233,6 @@ function VerifierDashboard() {
     } catch (e) { console.error(e); }
   };
 
-  // --- SIDEBAR ---
   const verifierSidebar = (
     <Box>
       <Card sx={{ mb: 3 }}>
@@ -275,23 +275,28 @@ function VerifierDashboard() {
         {currentTab === 0 && (
           <CardContent>
              <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>Verifiable Presentation Data</Typography>
-                <TextField
-                  fullWidth multiline rows={4}
-                  placeholder='Paste JSON Proof here...'
-                  value={proofInput}
-                  onChange={(e) => {
-                      setProofInput(e.target.value);
-                      setActiveInboxRequest(null); 
-                  }}
-                  sx={{fontFamily: 'monospace', bgcolor: '#f8f9fa'}}
-                />
-                <Button variant="contained" size="large" sx={{ mt: 2 }} onClick={() => handleVerify()} startIcon={<VerifierIcon />}>
-                    Verify Signature & Data
-                </Button>
-              </Grid>
+              
+              {/* 👇 UPDATED: Input Field is now HIDDEN if a result exists */}
+              {!verificationResult && (
+                  <Grid item xs={12}>
+                    <Typography variant="h6" gutterBottom>Verifiable Presentation Data</Typography>
+                    <TextField
+                      fullWidth multiline rows={4}
+                      placeholder='Paste JSON Proof here...'
+                      value={proofInput}
+                      onChange={(e) => {
+                          setProofInput(e.target.value);
+                          setActiveInboxRequest(null); 
+                      }}
+                      sx={{fontFamily: 'monospace', bgcolor: '#f8f9fa'}}
+                    />
+                    <Button variant="contained" size="large" sx={{ mt: 2 }} onClick={() => handleVerify()} startIcon={<VerifierIcon />}>
+                        Verify Signature & Data
+                    </Button>
+                  </Grid>
+              )}
 
+              {/* 👇 UPDATED: Result Display */}
               {verificationResult && (
                   <Grid item xs={12}>
                       <Divider sx={{my:2}} />
@@ -308,36 +313,27 @@ function VerifierDashboard() {
                       
                       {verificationResult.status === 'Valid' && (
                         <Box>
-                            {/* 1. If it's a Full Identity Doc, Show the Friendly Card */}
+                            {/* 1. Digital ID Card (Only for Full ID) */}
                             {verificationResult.type === 'Full Identity Document' && verificationResult.rawVP.verifiableCredential && (
                                 <Box sx={{ mb: 3, display:'flex', justifyContent:'center' }}>
                                     <DigitalIDCard vcData={verificationResult.rawVP.verifiableCredential[0]} />
                                 </Box>
                             )}
                             
-                            {/* 2. Show Action Button based on Type */}
+                            {/* 2. Action Buttons */}
                             {activeInboxRequest && (
-                                <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
-                                    <Alert severity="info" sx={{ flexGrow: 1 }}>
-                                        Proof linked to Inbox Request. 
-                                    </Alert>
+                                <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center', justifyContent: 'center' }}>
                                     
-                                    {/* 👇 LOGIC CHANGE: Only show Original Images for Full Disclosure */}
-                                    {verificationResult.type === 'Full Identity Document' ? (
+                                    {(verificationResult.type === 'Full Identity Document' || verificationResult.type === 'Redacted Document') ? (
                                         <Button 
-                                            variant="contained" 
-                                            color="primary"
-                                            startIcon={<VisibilityIcon />}
+                                            variant="contained" color="primary" startIcon={<VisibilityIcon />}
                                             onClick={() => handleViewDocument(activeInboxRequest)}
                                         >
                                             View Original Images
                                         </Button>
                                     ) : (
-                                        // For ZKP/Redacted, show Proof Data only
                                         <Button 
-                                            variant="contained" 
-                                            color="success"
-                                            startIcon={<LockIcon />}
+                                            variant="contained" color="success" startIcon={<LockIcon />}
                                             onClick={() => {
                                                 setViewProofData(activeInboxRequest.proofData);
                                                 setIsProofModalOpen(true);
@@ -348,23 +344,26 @@ function VerifierDashboard() {
                                     )}
                                 </Box>
                             )}
-
-                            {/* 3. Raw Data Fallback */}
-                            <Paper variant="outlined" sx={{p:2, mt: 2}}>
-                                <Typography variant="subtitle1" sx={{fontWeight:'bold', mb:1}}>
-                                    Decoded Data (JSON)
-                                </Typography>
-                                <pre>{JSON.stringify(verificationResult.data, null, 2)}</pre>
-                            </Paper>
                         </Box>
                       )}
+
+                      {/* 👇 NEW: Reset Button to Verify Another */}
+                      <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
+                          <Button 
+                            variant="outlined" 
+                            startIcon={<ArrowBackIcon />}
+                            onClick={handleResetVerification}
+                          >
+                              Verify Another Document
+                          </Button>
+                      </Box>
                   </Grid>
               )}
             </Grid>
           </CardContent>
         )}
         
-        {/* --- Tab 1: Inbox --- */}
+        {/* --- Tab 1: Inbox (Unchanged) --- */}
         {currentTab === 1 && (
             <CardContent>
                 <Box sx={{display:'flex', justifyContent:'space-between', mb:2}}>
@@ -395,10 +394,9 @@ function VerifierDashboard() {
             </CardContent>
         )}
 
-        {/* --- Tab 2: SEARCH & REQUEST STATUS --- */}
+        {/* --- Tab 2: SEARCH (Unchanged) --- */}
         {currentTab === 2 && (
             <CardContent>
-                {/* 1. Search Section */}
                 <Box sx={{ maxWidth: 600, mx: 'auto', textAlign: 'center', mb: 6 }}>
                     <Typography variant="h6" gutterBottom>Find a User</Typography>
                     <form onSubmit={handleSearchUser} style={{ display: 'flex', gap: 10 }}>
@@ -418,7 +416,6 @@ function VerifierDashboard() {
                     {searchError && <Alert severity="warning" sx={{mt:2}}>{searchError}</Alert>}
                 </Box>
 
-                {/* 2. Search Results Grid */}
                 {searchResults.length > 0 && (
                     <Box sx={{ mb: 6 }}>
                         <Typography variant="h6" sx={{ mb: 2 }}>Search Results</Typography>
@@ -447,7 +444,6 @@ function VerifierDashboard() {
                     </Box>
                 )}
 
-                {/* 3. My Access Requests Table */}
                 <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                      My Access Requests <RefreshIcon onClick={fetchSentRequests} sx={{ cursor: 'pointer', fontSize: 20, color: 'gray' }}/>
                 </Typography>

@@ -9,7 +9,7 @@ import { AccessTime, CheckCircle, Cancel, Security, Visibility } from '@mui/icon
 const IncomingRequests = ({ userEmail }) => {
   const [requests, setRequests] = useState([]);
   const [durations, setDurations] = useState({}); 
-  const [processingId, setProcessingId] = useState(null); // To show loading spinner
+  const [processingId, setProcessingId] = useState(null); 
 
   useEffect(() => {
     if(userEmail) fetchRequests();
@@ -34,32 +34,103 @@ const IncomingRequests = ({ userEmail }) => {
     setDurations({ ...durations, [reqId]: minutes });
   };
 
+  // 👇 HELPER: Generate VP for Redacted/Full Requests
+  const generatePresentation = (request, type) => {
+      try {
+          const docData = JSON.parse(request.document.ocrData || "{}"); // Get OCR Data
+          const vcData = JSON.parse(request.document.verifiableCredential || "{}"); // Get Original VC
+          
+          let presentation = {};
+          
+          if (type === 'REDACTED') {
+              // 1. Create a deep copy of the VC
+              const redactedVc = JSON.parse(JSON.stringify(vcData));
+              const allowedList = (request.allowedFields || "").toLowerCase();
+              
+              // 2. Filter Fields based on what Verifier requested
+              // Note: This matches the fields in DocumentViewerModal logic
+              const frontClaims = redactedVc.credentialSubject.claims.front || {};
+              const backClaims = redactedVc.credentialSubject.claims.back || {};
+              
+              const allKeys = [...Object.keys(frontClaims), ...Object.keys(backClaims)];
+              
+              allKeys.forEach(key => {
+                  // If key is NOT in allowed list, delete it
+                  if (!allowedList.includes(key.toLowerCase())) {
+                      delete frontClaims[key];
+                      delete backClaims[key];
+                  }
+              });
+
+              // 3. Construct Redacted VP
+              presentation = {
+                  "@context": ["https://www.w3.org/2018/credentials/v1"],
+                  "type": ["VerifiablePresentation", "RedactedDisclosure"],
+                  "holder": "did:example:holder", // In real app, use user's DID
+                  "proof": {
+                      "type": "JsonWebSignature2020",
+                      "created": new Date().toISOString(),
+                      "jws": "mock-redacted-signature"
+                  },
+                  "verifiableCredential": [redactedVc]
+              };
+              
+          } else {
+              // FULL ACCESS VP
+              presentation = {
+                  "@context": ["https://www.w3.org/2018/credentials/v1"],
+                  "type": ["VerifiablePresentation", "FullDocumentDisclosure"],
+                  "holder": "did:example:holder",
+                  "proof": {
+                      "type": "JsonWebSignature2020",
+                      "created": new Date().toISOString(),
+                      "jws": "mock-full-signature"
+                  },
+                  "verifiableCredential": [vcData]
+              };
+          }
+          
+          return JSON.stringify(presentation);
+      } catch (e) {
+          console.error("VP Gen Error", e);
+          return null;
+      }
+  };
+
   const handleResponse = async (request, status) => {
-    setProcessingId(request.id); // Start loading
+    setProcessingId(request.id);
     const password = sessionStorage.getItem('temp_pass');
-    const duration = durations[request.id] || 60; // Default 1 hour
+    const duration = durations[request.id] || 60;
     let proofData = null;
 
     try {
-      // --- 1. IF ZKP REQUEST, GENERATE PROOF FIRST ---
-      if (status === 'APPROVED' && request.accessType === 'ZKP_AGE') {
-        console.log("Generating ZK Proof for Document ID:", request.document.id);
-        
-        const proofRes = await fetch(`http://localhost:8080/api/user/generate-proof/age?documentId=${request.document.id}`, {
-             method: 'POST',
-             headers: { 'Authorization': 'Basic ' + btoa(`${userEmail}:${password}`) }
-        });
-        
-        if (!proofRes.ok) throw new Error("Failed to generate Zero-Knowledge Proof");
-        proofData = await proofRes.text(); // Get proof JSON string
+      // --- 1. GENERATE PROOF BASED ON TYPE ---
+      if (status === 'APPROVED') {
+          if (request.accessType === 'ZKP_AGE') {
+            // A. ZKP (Server Generation)
+            const proofRes = await fetch(`http://localhost:8080/api/user/generate-proof/age?documentId=${request.document.id}`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Basic ' + btoa(`${userEmail}:${password}`) }
+            });
+            if (!proofRes.ok) throw new Error("Failed to generate ZK Proof");
+            proofData = await proofRes.text();
+          
+          } else if (request.accessType === 'REDACTED') {
+            // B. REDACTED VP (Client Generation)
+            proofData = generatePresentation(request, 'REDACTED');
+            
+          } else {
+            // C. FULL VP (Client Generation)
+            proofData = generatePresentation(request, 'FULL');
+          }
       }
 
-      // --- 2. SEND RESPONSE TO BACKEND ---
+      // --- 2. SEND RESPONSE ---
       const payload = {
         requestId: request.id,
         status: status,
         durationInMinutes: duration,
-        generatedProof: proofData // Attach proof (will be null for normal requests)
+        generatedProof: proofData // Now populated for ALL types!
       };
 
       await fetch('http://localhost:8080/api/user/respond-request', {
@@ -71,14 +142,13 @@ const IncomingRequests = ({ userEmail }) => {
         body: JSON.stringify(payload)
       });
       
-      // Remove from list
       setRequests(requests.filter(r => r.id !== request.id));
       
     } catch (error) {
       console.error("Error updating request:", error);
       alert("Error: " + error.message);
     } finally {
-      setProcessingId(null); // Stop loading
+      setProcessingId(null);
     }
   };
 
@@ -114,12 +184,13 @@ const IncomingRequests = ({ userEmail }) => {
                     <TableCell>
                         {req.accessType === 'ZKP_AGE' ? (
                             <Chip icon={<Security />} label="ZK Proof" color="success" size="small" variant="outlined" />
+                        ) : req.accessType === 'REDACTED' ? (
+                            <Chip icon={<Visibility />} label="Redacted" color="warning" size="small" variant="outlined" />
                         ) : (
                             <Chip icon={<Visibility />} label="Full View" color="primary" size="small" variant="outlined" />
                         )}
                     </TableCell>
                     
-                    {/* Duration Selector */}
                     <TableCell>
                       <FormControl size="small">
                         <Select
@@ -134,7 +205,6 @@ const IncomingRequests = ({ userEmail }) => {
                       </FormControl>
                     </TableCell>
 
-                    {/* Buttons */}
                     <TableCell align="right">
                       <Button 
                         variant="contained" color="success" size="small" 

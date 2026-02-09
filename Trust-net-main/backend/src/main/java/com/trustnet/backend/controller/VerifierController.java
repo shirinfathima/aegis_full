@@ -107,7 +107,7 @@ public class VerifierController {
         return ResponseEntity.ok(accessRequestRepository.findByVerifierEmail(verifierEmail));
     }
 
-    // --- 👇 NEW: INBOX ENDPOINT (User Sent Proofs) 👇 ---
+    // --- INBOX ENDPOINT (User Sent Proofs) ---
     @GetMapping("/inbox")
     public ResponseEntity<List<AccessRequest>> getInbox(@RequestParam String verifierEmail) {
         List<AccessRequest> allRequests = accessRequestRepository.findByVerifierEmail(verifierEmail);
@@ -133,7 +133,9 @@ public class VerifierController {
             AccessRequest request = accessRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
 
-            if (request.getStatus() != AccessRequest.RequestStatus.APPROVED) {
+            // Check if status allows viewing (APPROVED or VERIFIED if you kept the enum, but logic here is standard)
+            if (request.getStatus() != AccessRequest.RequestStatus.APPROVED && 
+                request.getStatus().toString() != "VERIFIED") { 
                 return ResponseEntity.badRequest().body("Access not approved by user.");
             }
 
@@ -208,6 +210,9 @@ public class VerifierController {
             Long documentId = Long.valueOf(payload.get("documentId").toString());
             String accessType = (String) payload.get("accessType"); 
             String proofData = (String) payload.get("vpJson");
+            
+            // Extract allowedFields from payload (For Redacted View)
+            String allowedFields = (String) payload.get("allowedFields");
 
             if(verifierEmail == null || documentId == null) {
                 return ResponseEntity.badRequest().body("Missing required fields");
@@ -220,6 +225,10 @@ public class VerifierController {
             request.setStatus(AccessRequest.RequestStatus.APPROVED);
             request.setAccessType(accessType);
             request.setProofData(proofData);
+            
+            // Set the allowed fields
+            request.setAllowedFields(allowedFields);
+            
             request.setRequestDate(LocalDateTime.now());
             request.setExpiryDate(LocalDateTime.now().plusHours(24));
             

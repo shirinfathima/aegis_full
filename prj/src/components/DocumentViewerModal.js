@@ -9,54 +9,120 @@ import {
 } from '@mui/icons-material';
 
 const DocumentViewerModal = ({ isOpen, onClose, request }) => {
-  const [viewSide, setViewSide] = useState('front'); // State to track which side is shown
+  const [viewSide, setViewSide] = useState('front'); 
 
-  // Reset to front view whenever the modal opens or request changes
   useEffect(() => {
     if (isOpen) setViewSide('front');
   }, [isOpen, request]);
 
   if (!request || !request.document) return null;
 
-  const { accessType, allowedFields, document, verifierEmail } = request;
+  const { accessType, allowedFields, document, verifierEmail, proofData } = request;
   const isRedacted = accessType === 'REDACTED';
-  const hasBackImage = !!document.fileDataBack; // Check if back image exists
+  const hasBackImage = !!document.fileDataBack; 
 
-  // --- 1. PARSE OCR DATA ---
-  let ocrData = {};
+  // --- 1. SMART DATA EXTRACTION ---
+  let flattenedData = {};
+  let dataSource = "Raw OCR"; 
+
+  const extractAndFlatten = (sourceObj) => {
+      if (!sourceObj) return {};
+      let result = {};
+      
+      const content = sourceObj.claims || sourceObj.extracted || sourceObj;
+
+      Object.assign(result, content);
+
+      if (content.back) {
+          Object.assign(result, content.back);
+      }
+
+      if (content.front) {
+          Object.assign(result, content.front);
+      }
+      
+      return result;
+  };
+
   try {
-    ocrData = JSON.parse(document.ocrData || "{}");
+      if (proofData) {
+          const vp = JSON.parse(proofData);
+          if (vp.verifiableCredential && vp.verifiableCredential.length > 0) {
+              const subject = vp.verifiableCredential[0].credentialSubject;
+              flattenedData = extractAndFlatten(subject);
+              dataSource = "Verifiable Presentation";
+          }
+      } 
+      
+      if (Object.keys(flattenedData).length === 0 && document.verifiableCredential) {
+          const vc = JSON.parse(document.verifiableCredential);
+          flattenedData = extractAndFlatten(vc.credentialSubject);
+          dataSource = "Original Credential";
+      } 
+      
+      if (Object.keys(flattenedData).length === 0) {
+          const ocr = JSON.parse(document.ocrData || "{}");
+          flattenedData = extractAndFlatten(ocr);
+      }
   } catch (e) {
-    // console.error("OCR Parse Error", e);
+      console.error("Data Parsing Error", e);
   }
 
   // --- 2. PERMISSION CHECKER ---
+  const allowedList = (allowedFields && isRedacted) 
+      ? allowedFields.toLowerCase().split(',').map(f => f.trim()) 
+      : [];
+
   const isFieldAllowed = (fieldName) => {
     if (!isRedacted) return true; 
-    if (!allowedFields) return false;
-    return allowedFields.toLowerCase().includes(fieldName.toLowerCase());
+    if (!allowedFields) return false; 
+    return allowedList.includes(fieldName.toLowerCase());
   };
 
-  // --- 3. DATA EXTRACTION ---
+  // --- 3. ROBUST DATA MAPPING ---
+  const getValue = (keyName) => {
+      const lowerKey = keyName.toLowerCase();
+      
+      const map = {
+          'name': ['name', 'fullname', 'full_name'],
+          'dob': ['dob', 'date of birth', 'birthdate'],
+          'id_number': ['registration number', 'idno', 'id_number', 'regno', 'reg no'], 
+          'college': ['university', 'college', 'school', 'institution', 'university address'] 
+      };
+      
+      const possibilities = map[lowerKey] || [lowerKey];
+      
+      for (const possibleKey of possibilities) {
+          if (flattenedData[possibleKey]) return flattenedData[possibleKey];
+          
+          const found = Object.keys(flattenedData).find(k => k.toLowerCase() === possibleKey);
+          if (found) return flattenedData[found];
+      }
+      return "Not Shared";
+  };
+
+  // 👇 FIX: Added Permission Checks for every field
   const displayData = {
-    Name: isFieldAllowed('Name') ? (ocrData.front?.name || "John Doe") : "REDACTED",
-    DOB: isFieldAllowed('Date of Birth') ? (ocrData.front?.dob || "01/01/2000") : "REDACTED",
-    ID_Number: isFieldAllowed('Reg No') ? (ocrData.front?.idNo || "123456789") : "REDACTED",
-    Address: isFieldAllowed('Address') ? (ocrData.back?.address || "123 Tech Street") : "REDACTED"
+    Name: isFieldAllowed('Name') ? getValue('Name') : "REDACTED",
+    
+    DOB: isFieldAllowed('Date of Birth') ? getValue('DOB') : "REDACTED",
+    
+    // Check 'Reg No' permission for ID Number
+    ID_Number: isFieldAllowed('Reg No') ? getValue('ID_Number') : "REDACTED", 
+    
+    // Check 'Address' permission for College/University Address
+    College: isFieldAllowed('Address') ? getValue('College') : "REDACTED"     
   };
 
-  // Determine current image source based on toggle state
   const currentImageSrc = viewSide === 'front' 
     ? document.fileData 
     : document.fileDataBack;
 
   return (
     <Dialog open={isOpen} onClose={onClose} maxWidth="md" fullWidth>
-      {/* HEADER */}
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f8f9fa', borderBottom: '1px solid #eee' }}>
         <Description color="primary"/> 
         {isRedacted ? "Redacted Document View" : "Full Document View"}
-        
         <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
             <Chip 
                 label={isRedacted ? "Restricted Access" : "Full Access"} 
@@ -68,128 +134,54 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
       
       <DialogContent sx={{ p: 3 }}>
         <Grid container spacing={3} sx={{ mt: 0 }}>
-            
-            {/* --- LEFT: DOCUMENT IMAGE (With Watermark & Stamp) --- */}
+            {/* LEFT: IMAGE */}
             <Grid item xs={12} md={7}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                     <Typography variant="subtitle2" sx={{color:'text.secondary'}}>
                         OFFICIAL RECORD ({viewSide.toUpperCase()})
                     </Typography>
-                    
-                    {/* FLIP BUTTON */}
                     {hasBackImage && (!isRedacted || isFieldAllowed('Photo')) && (
                         <Button 
-                            size="small" 
-                            startIcon={<FlipCameraAndroid />} 
+                            size="small" startIcon={<FlipCameraAndroid />} variant="outlined"
                             onClick={() => setViewSide(prev => prev === 'front' ? 'back' : 'front')}
-                            variant="outlined"
                         >
                             Flip to {viewSide === 'front' ? 'Back' : 'Front'}
                         </Button>
                     )}
                 </Box>
-                
-                <Paper 
-                    variant="outlined" 
-                    sx={{ 
-                        height: 350, 
-                        position: 'relative', 
-                        overflow: 'hidden',
-                        bgcolor: '#333',
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center',
-                        borderRadius: 2
-                    }}
-                >
+                <Paper variant="outlined" sx={{ height: 350, position: 'relative', overflow: 'hidden', bgcolor: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 2 }}>
                     {(!isRedacted || isFieldAllowed('Photo')) ? (
                         <>
-                            {/* A. THE IMAGE (Toggles based on state) */}
-                            <img 
-                                key={viewSide} // Forces re-render on flip
-                                src={currentImageSrc ? `data:image/png;base64,${currentImageSrc}` : "https://via.placeholder.com/500x350?text=Image+Not+Found"} 
-                                alt="Document" 
-                                style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
-                            />
-
-                            {/* B. THE DIGITAL STAMP (Only on Front usually, but we keep on both for now) */}
-                            <Tooltip title={`Digitally Signed by Issuer: ${document.issuerEmail || 'TrustNet Authority'}`}>
-                                <Box sx={{
-                                    position: 'absolute',
-                                    top: 15, right: 15,
-                                    bgcolor: 'rgba(255, 215, 0, 0.9)', 
-                                    color: '#5c3a00',
-                                    border: '2px solid #fff',
-                                    borderRadius: '50%',
-                                    width: 70, height: 70,
-                                    display: 'flex', flexDirection: 'column',
-                                    alignItems: 'center', justifyContent: 'center',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                                    zIndex: 10,
-                                    transform: 'rotate(15deg)'
-                                }}>
-                                    <GppGood sx={{ fontSize: 24 }} />
-                                    <Typography variant="caption" sx={{ fontSize: 8, fontWeight: 'bold', lineHeight: 1 }}>
-                                        ISSUED
-                                    </Typography>
-                                    <Typography variant="caption" sx={{ fontSize: 7 }}>
-                                        VERIFIED
-                                    </Typography>
-                                </Box>
-                            </Tooltip>
-
-                            {/* C. THE WATERMARK */}
-                            <Box sx={{
-                                position: 'absolute',
-                                inset: 0,
-                                pointerEvents: 'none',
-                                zIndex: 5,
-                                display: 'flex',
-                                flexWrap: 'wrap',
-                                opacity: 0.15, 
-                                transform: 'rotate(-25deg) scale(1.5)',
-                                overflow: 'hidden'
-                            }}>
+                            <img key={viewSide} src={currentImageSrc ? `data:image/png;base64,${currentImageSrc}` : "https://via.placeholder.com/500x350?text=Image+Not+Found"} alt="Doc" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                            {/* Watermark */}
+                            <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5, display: 'flex', flexWrap: 'wrap', opacity: 0.15, transform: 'rotate(-25deg) scale(1.5)' }}>
                                 {Array.from({ length: 20 }).map((_, i) => (
-                                    <Typography key={i} variant="h6" sx={{ 
-                                        color: 'white', 
-                                        fontWeight: 'bold', 
-                                        mr: 8, mb: 8,
-                                        userSelect: 'none' 
-                                    }}>
-                                        {verifierEmail} • {new Date().toLocaleDateString()}
-                                    </Typography>
+                                    <Typography key={i} variant="h6" sx={{ color: 'white', fontWeight: 'bold', mr: 8, mb: 8, userSelect: 'none' }}>{verifierEmail} • {new Date().toLocaleDateString()}</Typography>
                                 ))}
                             </Box>
                         </>
                     ) : (
                         <Box sx={{ textAlign: 'center', color: '#888' }}>
-                            <VisibilityOff sx={{ fontSize: 60, mb: 1 }} />
-                            <Typography variant="h6">REDACTED</Typography>
-                            <Typography variant="caption">Photo access denied.</Typography>
+                            <VisibilityOff sx={{ fontSize: 60, mb: 1 }} /><Typography variant="h6">REDACTED</Typography>
                         </Box>
                     )}
                 </Paper>
-
-                <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary', textAlign: 'center' }}>
-                    <VerifiedUser fontSize="inherit" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
-                    Digitally Stamped by <strong>{document.issuerEmail || "Issuer Authority"}</strong>
-                </Typography>
             </Grid>
 
-            {/* --- RIGHT: EXTRACTED DATA --- */}
+            {/* RIGHT: VERIFIED DATA POINTS */}
             <Grid item xs={12} md={5}>
-                <Typography variant="subtitle2" gutterBottom sx={{color:'text.secondary'}}>
-                    VERIFIED DATA POINTS
+                <Typography variant="subtitle2" gutterBottom sx={{color:'text.secondary', display:'flex', justifyContent:'space-between'}}>
+                    <span>VERIFIED DATA POINTS</span>
+                    <Chip label={dataSource === "Verifiable Presentation" ? "Live Proof Data" : "Stored Credential"} size="small" color="success" variant="outlined" sx={{height:20, fontSize:10}} />
                 </Typography>
                 
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {Object.entries(displayData).map(([label, value]) => (
                         <Paper key={label} elevation={0} sx={{ 
                             p: 2, 
-                            bgcolor: value === "REDACTED" ? '#f5f5f5' : '#e3f2fd',
+                            bgcolor: value === "REDACTED" || value === "Not Shared" ? '#f5f5f5' : '#e3f2fd',
                             border: '1px solid',
-                            borderColor: value === "REDACTED" ? '#e0e0e0' : '#bbdefb',
+                            borderColor: value === "REDACTED" || value === "Not Shared" ? '#e0e0e0' : '#bbdefb',
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between' 
                         }}>
                             <Box>
@@ -197,8 +189,8 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
                                     {label.replace('_', ' ')}
                                 </Typography>
                                 <Typography variant="body1" fontWeight="bold" sx={{ 
-                                    color: value === "REDACTED" ? "text.disabled" : "#1565c0",
-                                    fontStyle: value === "REDACTED" ? "italic" : "normal"
+                                    color: value === "REDACTED" || value === "Not Shared" ? "text.disabled" : "#1565c0",
+                                    fontStyle: value === "REDACTED" || value === "Not Shared" ? "italic" : "normal"
                                 }}>
                                     {value}
                                 </Typography>
@@ -207,19 +199,14 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
                         </Paper>
                     ))}
                 </Box>
-
                 <Alert severity="info" sx={{ mt: 3, fontSize: '0.75rem' }}>
-                    This view is watermarked with your identity ({verifierEmail}). Any screenshots will be traced back to you.
+                    Data extracted from {dataSource}. Images are watermarked.
                 </Alert>
             </Grid>
         </Grid>
-
         <Divider sx={{ my: 3 }} />
-
         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button onClick={onClose} variant="contained" size="large">
-                Close Viewer
-            </Button>
+            <Button onClick={onClose} variant="contained" size="large">Close Viewer</Button>
         </Box>
       </DialogContent>
     </Dialog>
