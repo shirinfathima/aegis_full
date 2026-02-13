@@ -34,39 +34,62 @@ const IncomingRequests = ({ userEmail }) => {
     setDurations({ ...durations, [reqId]: minutes });
   };
 
-  // 👇 HELPER: Generate VP for Redacted/Full Requests
+  // 👇 HELPER: Generate VP (Redacted / Full / ZKP)
   const generatePresentation = (request, type) => {
       try {
-          const docData = JSON.parse(request.document.ocrData || "{}"); // Get OCR Data
-          const vcData = JSON.parse(request.document.verifiableCredential || "{}"); // Get Original VC
-          
+          const vcData = JSON.parse(request.document.verifiableCredential || "{}");
           let presentation = {};
           
-          if (type === 'REDACTED') {
-              // 1. Create a deep copy of the VC
+          // --- 1. ZKP LOGIC (Using the Mock JSON you requested) ---
+          if (type === 'ZKP') {
+              const rawZkProof = {
+                "curve": "bn128",
+                "scheme": "groth16",
+                "a": ["0x1a2b3c4d5e6f...", "0x4d5e6f7a8b9c..."],
+                "b": [
+                  ["0x7a8b9c0d1e2f...", "0x0d1e2f3a4b5c..."],
+                  ["0x3a4b5c6d7e8f...", "0x6d7e8f9a8b7c..."]
+                ],
+                "c": ["0x9a8b7c6d5e4f...", "0x6d5e4f3a2b1c..."]
+              };
+
+              presentation = {
+                  "@context": ["https://www.w3.org/2018/credentials/v1"],
+                  "type": ["VerifiablePresentation", "AgeVerificationProof"],
+                  "holder": "did:example:holder",
+                  "proof": {
+                      "type": "ZeroKnowledgeProof",
+                      "created": new Date().toISOString(),
+                      "proofValue": rawZkProof,
+                      "disclosedAttributes": {
+                        "age_over_21": true
+                      }
+                  },
+                  "verifiableCredential": [
+                     { "id": "urn:uuid:masked-credential", "proofType": "ZKP" }
+                  ]
+              };
+
+          // --- 2. REDACTED LOGIC ---
+          } else if (type === 'REDACTED') {
               const redactedVc = JSON.parse(JSON.stringify(vcData));
               const allowedList = (request.allowedFields || "").toLowerCase();
               
-              // 2. Filter Fields based on what Verifier requested
-              // Note: This matches the fields in DocumentViewerModal logic
               const frontClaims = redactedVc.credentialSubject.claims.front || {};
               const backClaims = redactedVc.credentialSubject.claims.back || {};
-              
               const allKeys = [...Object.keys(frontClaims), ...Object.keys(backClaims)];
               
               allKeys.forEach(key => {
-                  // If key is NOT in allowed list, delete it
                   if (!allowedList.includes(key.toLowerCase())) {
                       delete frontClaims[key];
                       delete backClaims[key];
                   }
               });
 
-              // 3. Construct Redacted VP
               presentation = {
                   "@context": ["https://www.w3.org/2018/credentials/v1"],
                   "type": ["VerifiablePresentation", "RedactedDisclosure"],
-                  "holder": "did:example:holder", // In real app, use user's DID
+                  "holder": "did:example:holder",
                   "proof": {
                       "type": "JsonWebSignature2020",
                       "created": new Date().toISOString(),
@@ -75,8 +98,8 @@ const IncomingRequests = ({ userEmail }) => {
                   "verifiableCredential": [redactedVc]
               };
               
+          // --- 3. FULL LOGIC ---
           } else {
-              // FULL ACCESS VP
               presentation = {
                   "@context": ["https://www.w3.org/2018/credentials/v1"],
                   "type": ["VerifiablePresentation", "FullDocumentDisclosure"],
@@ -106,21 +129,15 @@ const IncomingRequests = ({ userEmail }) => {
     try {
       // --- 1. GENERATE PROOF BASED ON TYPE ---
       if (status === 'APPROVED') {
-          if (request.accessType === 'ZKP_AGE') {
-            // A. ZKP (Server Generation)
-            const proofRes = await fetch(`http://localhost:8080/api/user/generate-proof/age?documentId=${request.document.id}`, {
-                method: 'POST',
-                headers: { 'Authorization': 'Basic ' + btoa(`${userEmail}:${password}`) }
-            });
-            if (!proofRes.ok) throw new Error("Failed to generate ZK Proof");
-            proofData = await proofRes.text();
+          // Check for both ZKP_AGE and ZKP
+          const isZKP = request.accessType === 'ZKP_AGE' || request.accessType === 'ZKP';
           
+          if (isZKP) {
+            // FORCE Client-Side Mock Generation (No Backend Call)
+            proofData = generatePresentation(request, 'ZKP');
           } else if (request.accessType === 'REDACTED') {
-            // B. REDACTED VP (Client Generation)
             proofData = generatePresentation(request, 'REDACTED');
-            
           } else {
-            // C. FULL VP (Client Generation)
             proofData = generatePresentation(request, 'FULL');
           }
       }
@@ -130,7 +147,7 @@ const IncomingRequests = ({ userEmail }) => {
         requestId: request.id,
         status: status,
         durationInMinutes: duration,
-        generatedProof: proofData // Now populated for ALL types!
+        generatedProof: proofData 
       };
 
       await fetch('http://localhost:8080/api/user/respond-request', {
@@ -173,16 +190,17 @@ const IncomingRequests = ({ userEmail }) => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {requests.map((req) => (
+                {requests.map((req) => {
+                  const isZKP = req.accessType === 'ZKP_AGE' || req.accessType === 'ZKP';
+                  return (
                   <TableRow key={req.id}>
                     <TableCell>
                         <Typography variant="body2" fontWeight="bold">{req.verifierEmail}</Typography>
                         <Typography variant="caption">{req.document?.documentName}</Typography>
                     </TableCell>
                     
-                    {/* Access Type Badge */}
                     <TableCell>
-                        {req.accessType === 'ZKP_AGE' ? (
+                        {isZKP ? (
                             <Chip icon={<Security />} label="ZK Proof" color="success" size="small" variant="outlined" />
                         ) : req.accessType === 'REDACTED' ? (
                             <Chip icon={<Visibility />} label="Redacted" color="warning" size="small" variant="outlined" />
@@ -213,7 +231,7 @@ const IncomingRequests = ({ userEmail }) => {
                         onClick={() => handleResponse(req, 'APPROVED')}
                         sx={{ mr: 1 }}
                       >
-                        {req.accessType === 'ZKP_AGE' ? "Gen Proof" : "Approve"}
+                        {isZKP ? "Gen Proof" : "Approve"}
                       </Button>
                       <Button 
                         variant="outlined" color="error" size="small" 
@@ -225,7 +243,7 @@ const IncomingRequests = ({ userEmail }) => {
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                )})}
               </TableBody>
             </Table>
           </TableContainer>

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Dialog, DialogContent, DialogTitle, Typography, Box, 
-  Chip, Divider, Button, Grid, Paper, Tooltip, Alert 
+  Chip, Divider, Button, Grid, Paper, Alert 
 } from '@mui/material';
 import { 
-  Visibility, VisibilityOff, Description, 
-  VerifiedUser, GppGood, FlipCameraAndroid 
+  VisibilityOff, Description, VerifiedUser, 
+  FlipCameraAndroid, Security 
 } from '@mui/icons-material';
 
 const DocumentViewerModal = ({ isOpen, onClose, request }) => {
@@ -18,7 +18,11 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
   if (!request || !request.document) return null;
 
   const { accessType, allowedFields, document, verifierEmail, proofData } = request;
-  const isRedacted = accessType === 'REDACTED';
+
+  // 👇 FIX: Robust check for ZKP_AGE or ZKP
+  const isZKP = accessType === 'ZKP_AGE' || accessType === 'ZKP';
+  const isRedacted = accessType === 'REDACTED' || isZKP;
+  
   const hasBackImage = !!document.fileDataBack; 
 
   // --- 1. SMART DATA EXTRACTION ---
@@ -74,8 +78,8 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
       : [];
 
   const isFieldAllowed = (fieldName) => {
-    if (!isRedacted) return true; 
-    if (!allowedFields) return false; 
+    if (!isRedacted) return true; // Full access allows everything
+    if (!allowedFields) return false; // If redacted/ZKP and no list, hide everything
     return allowedList.includes(fieldName.toLowerCase());
   };
 
@@ -101,16 +105,10 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
       return "Not Shared";
   };
 
-  // 👇 FIX: Added Permission Checks for every field
   const displayData = {
     Name: isFieldAllowed('Name') ? getValue('Name') : "REDACTED",
-    
     DOB: isFieldAllowed('Date of Birth') ? getValue('DOB') : "REDACTED",
-    
-    // Check 'Reg No' permission for ID Number
     ID_Number: isFieldAllowed('Reg No') ? getValue('ID_Number') : "REDACTED", 
-    
-    // Check 'Address' permission for College/University Address
     College: isFieldAllowed('Address') ? getValue('College') : "REDACTED"     
   };
 
@@ -121,12 +119,13 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
   return (
     <Dialog open={isOpen} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f8f9fa', borderBottom: '1px solid #eee' }}>
-        <Description color="primary"/> 
-        {isRedacted ? "Redacted Document View" : "Full Document View"}
+        {isZKP ? <Security color="success"/> : <Description color="primary"/>}
+        {isZKP ? "Zero-Knowledge Proof View" : isRedacted ? "Redacted Document View" : "Full Document View"}
+        
         <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
             <Chip 
-                label={isRedacted ? "Restricted Access" : "Full Access"} 
-                color={isRedacted ? "warning" : "primary"} 
+                label={isZKP ? "ZKP Protected" : isRedacted ? "Restricted Access" : "Full Access"} 
+                color={isZKP ? "success" : isRedacted ? "warning" : "primary"} 
                 size="small" 
             />
         </Box>
@@ -153,7 +152,6 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
                     {(!isRedacted || isFieldAllowed('Photo')) ? (
                         <>
                             <img key={viewSide} src={currentImageSrc ? `data:image/png;base64,${currentImageSrc}` : "https://via.placeholder.com/500x350?text=Image+Not+Found"} alt="Doc" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                            {/* Watermark */}
                             <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5, display: 'flex', flexWrap: 'wrap', opacity: 0.15, transform: 'rotate(-25deg) scale(1.5)' }}>
                                 {Array.from({ length: 20 }).map((_, i) => (
                                     <Typography key={i} variant="h6" sx={{ color: 'white', fontWeight: 'bold', mr: 8, mb: 8, userSelect: 'none' }}>{verifierEmail} • {new Date().toLocaleDateString()}</Typography>
@@ -162,7 +160,9 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
                         </>
                     ) : (
                         <Box sx={{ textAlign: 'center', color: '#888' }}>
-                            <VisibilityOff sx={{ fontSize: 60, mb: 1 }} /><Typography variant="h6">REDACTED</Typography>
+                            {isZKP ? <Security sx={{ fontSize: 60, mb: 1, color: '#66bb6a' }} /> : <VisibilityOff sx={{ fontSize: 60, mb: 1 }} />}
+                            <Typography variant="h6">{isZKP ? "ZKP ENCRYPTED" : "REDACTED"}</Typography>
+                            <Typography variant="caption">{isZKP ? "Source image hidden via Zero-Knowledge Proof" : "Image access restricted"}</Typography>
                         </Box>
                     )}
                 </Paper>
@@ -195,7 +195,7 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
                                     {value}
                                 </Typography>
                             </Box>
-                            {value === "REDACTED" ? <VisibilityOff color="disabled" fontSize="small"/> : <VerifiedUser color="primary" fontSize="small"/>}
+                            {(value === "REDACTED" || value === "Not Shared") ? <VisibilityOff color="disabled" fontSize="small"/> : <VerifiedUser color="primary" fontSize="small"/>}
                         </Paper>
                     ))}
                 </Box>
