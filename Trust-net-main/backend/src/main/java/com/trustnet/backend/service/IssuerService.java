@@ -8,6 +8,8 @@ import com.trustnet.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 
 import java.security.MessageDigest;
@@ -29,6 +31,11 @@ public class IssuerService {
     @Autowired
     private BlockchainService blockchainService;
 
+    @Autowired
+    private CrossCheckService crossCheckService; // INJECTED: For registry verification
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     // UPDATED: Now returns a numeric string for uint256 compatibility
     private String sha256Hash(String data) {
         try {
@@ -47,6 +54,32 @@ public class IssuerService {
 
     public Document approveDocument(Long documentId) {
         return documentRepository.findById(documentId).map(document -> {
+            
+            // --- STEP 0: CROSS-CHECK AGAINST MOCK DATABASE (UNIVERSITY REGISTRY) ---
+            try {
+                // Parse the OCR data stored in the document (assumes it's a JSON string)
+                JsonNode ocrJson = objectMapper.readTree(document.getOcrData());
+                
+                // Extracting Admission No and Name from the JSON
+                // FIX: Get the "front" node first, then access the exact keys
+                JsonNode frontNode = ocrJson.get("front");
+                String admissionNo = frontNode.get("Registration Number").asText();
+                String studentName = frontNode.get("Name").asText();
+                
+                boolean isVerifiedInRegistry = crossCheckService.verifyStudent(admissionNo, studentName);
+
+                if (!isVerifiedInRegistry) {
+                    throw new RuntimeException("Verification Failed: Admission No '" + admissionNo + "' or Name does not match University records.");
+                }
+                
+                System.out.println("✅ Registry Cross-check Passed for: " + admissionNo);
+
+            } catch (Exception e) {
+                System.err.println("❌ Cross-check Error: " + e.getMessage());
+                throw new RuntimeException("Registry verification error: " + e.getMessage());
+            }
+
+            // --- PROCEED WITH APPROVAL AFTER SUCCESSFUL CROSS-CHECK ---
             document.setStatus(VerificationStatus.APPROVED);
             document.setFaceMatchConfidence(100.0);
 
@@ -63,29 +96,26 @@ public class IssuerService {
                 throw new RuntimeException("Failed to generate VC due to invalid document OCR data.", e);
             }
 
-            // 3. Calculate VC Hash for Anchoring (Step 5, Requirement 2)
-            // This now returns a numeric string safe for the contract
+            // 3. Calculate VC Hash for Anchoring
             String vcHash = sha256Hash(verifiableCredential);
             document.setVcHash(vcHash);
             
-            // 4. ANCHOR THE PROOF TO THE BLOCKCHAIN (Step 5, Requirement 3 & 4)
+            // 4. ANCHOR THE PROOF TO THE BLOCKCHAIN
             try {
                 // Anchoring the VC Hash to the blockchain 
                 TransactionReceipt receipt = blockchainService.anchorDocumentCID(document.getUserId(), vcHash);
                 
                 // Update Document entity with the Transaction Hash
                 document.setBlockchainTransactionHash(receipt.getTransactionHash());
-                
-                // Optional: You could fetch the block timestamp here if needed, 
-                // or just set the current system time as an approximation for the database
                 document.setAnchoringTime(String.valueOf(System.currentTimeMillis() / 1000));
 
                 System.out.println("✅ Blockchain Anchoring Successful. Tx Hash: " + receipt.getTransactionHash());
+
                 // --- HARD DELETE TEMPORARY IMAGES ---
-                // This ensures the raw personal data is removed from the database
                 document.setTempDocData(null);     // Delete Front ID
                 document.setTempDocBackData(null); // Delete Back ID
                 document.setTempSelfieData(null);  // Delete Selfie
+                
             } catch (Exception e) {
                 System.err.println("❌ Blockchain Anchoring Failed: " + e.getMessage());
                 throw new RuntimeException("Blockchain anchoring failed. Please ensure the private key is valid and the network is reachable.", e);
