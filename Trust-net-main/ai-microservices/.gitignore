@@ -1,43 +1,7 @@
 # ======================
 # Virtual Environments
 # ======================
-# Ignores the specific folders slowing you down
-liveness-venv/
-ocr/
+**/*venv/
 venv/
 env/
 .env
-
-# ======================
-# Python Cache & Compiled
-# ======================
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-
-# ======================
-# AI/ML Specific (Models & Large Data)
-# ======================
-# Prevents tracking large model files or datasets
-*.h5
-*.tflite
-*.onnx
-*.weights
-*.pkl
-*.joblib
-
-# ======================
-# Logs and Reports
-# ======================
-*.log
-.pytest_cache/
-.cache/
-
-# ======================
-# Local Test Artifacts
-# ======================
-# Keeps your local test images out of the repository
-sample_img/output/
-test_results/

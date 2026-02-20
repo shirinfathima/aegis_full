@@ -4,7 +4,7 @@ import { getCurrentUser, getStoredPassword } from './authService';
 const API_URL = 'http://localhost:8080/api';
 
 /**
- * Utility to generate Basic Auth headers for requests
+ * Utility to generate Basic Auth headers
  */
 const getAuthHeaders = () => {
     const currentUser = getCurrentUser();
@@ -20,7 +20,7 @@ const getAuthHeaders = () => {
 };
 
 /**
- * Uploads ID documents for verification (Existing Logic)
+ * Upload ID documents
  */
 export const uploadIdCard = async (frontFile, backFile, selfieFile, issuerId) => {
     const formData = new FormData();
@@ -44,27 +44,62 @@ export const uploadIdCard = async (frontFile, backFile, selfieFile, issuerId) =>
 };
 
 /**
- * Fetches and decrypts a document for viewing (New Logic for Verifiers)
+ * Fetch decrypted document
  */
 export const fetchDocument = async (documentId) => {
     try {
-        // Calls the backend decryption endpoint added to DocumentController
-        const response = await axios.get(`${API_URL}/documents/view/${documentId}`, {
-            responseType: 'blob', // Necessary for handling binary image data
-            headers: getAuthHeaders()
-        });
-        
-        // Creates a temporary local URL for the decrypted image blob
+        const response = await axios.get(
+            `${API_URL}/documents/view/${documentId}`,
+            {
+                responseType: 'blob',
+                headers: getAuthHeaders()
+            }
+        );
+
         return URL.createObjectURL(response.data);
+
     } catch (error) {
         console.error("Error fetching decrypted document:", error);
         throw error;
     }
 };
 
+/**
+ * 🔐 Generate & Verify Age Proof (ZKP On-Chain)
+ */
+export const verifyAgeWithZKP = async (documentId) => {
+    try {
+        const response = await axios.post(
+            `${API_URL}/verifier/generate-proof/age`,
+            null, // No body needed
+            {
+                params: { documentId: documentId }, // Sent as RequestParam
+                headers: getAuthHeaders()
+            }
+        );
+
+        // Backend already returns JSON stringified response
+        const data = typeof response.data === "string"
+            ? JSON.parse(response.data)
+            : response.data;
+
+        return {
+            verifiedOnChain: data.verifiedOnChain,
+            ageCheckResult: data.ageCheckResult,
+            birthYearUsed: data.birthYearUsed,
+            currentYearUsed: data.currentYearUsed
+        };
+
+    } catch (error) {
+        console.error("ZKP Verification Error:", error);
+        throw error;
+    }
+};
+
 const documentService = {
     uploadIdCard,
-    fetchDocument
+    fetchDocument,
+    verifyAgeWithZKP
 };
 
 export default documentService;

@@ -34,44 +34,13 @@ const IncomingRequests = ({ userEmail }) => {
     setDurations({ ...durations, [reqId]: minutes });
   };
 
-  // 👇 HELPER: Generate VP (Redacted / Full / ZKP)
+  // 👇 HELPER: Generate VP for Redacted / Full ONLY (No Fake ZKP!)
   const generatePresentation = (request, type) => {
       try {
           const vcData = JSON.parse(request.document.verifiableCredential || "{}");
           let presentation = {};
           
-          // --- 1. ZKP LOGIC (Using the Mock JSON you requested) ---
-          if (type === 'ZKP') {
-              const rawZkProof = {
-                "curve": "bn128",
-                "scheme": "groth16",
-                "a": ["0x1a2b3c4d5e6f...", "0x4d5e6f7a8b9c..."],
-                "b": [
-                  ["0x7a8b9c0d1e2f...", "0x0d1e2f3a4b5c..."],
-                  ["0x3a4b5c6d7e8f...", "0x6d7e8f9a8b7c..."]
-                ],
-                "c": ["0x9a8b7c6d5e4f...", "0x6d5e4f3a2b1c..."]
-              };
-
-              presentation = {
-                  "@context": ["https://www.w3.org/2018/credentials/v1"],
-                  "type": ["VerifiablePresentation", "AgeVerificationProof"],
-                  "holder": "did:example:holder",
-                  "proof": {
-                      "type": "ZeroKnowledgeProof",
-                      "created": new Date().toISOString(),
-                      "proofValue": rawZkProof,
-                      "disclosedAttributes": {
-                        "age_over_21": true
-                      }
-                  },
-                  "verifiableCredential": [
-                     { "id": "urn:uuid:masked-credential", "proofType": "ZKP" }
-                  ]
-              };
-
-          // --- 2. REDACTED LOGIC ---
-          } else if (type === 'REDACTED') {
+          if (type === 'REDACTED') {
               const redactedVc = JSON.parse(JSON.stringify(vcData));
               const allowedList = (request.allowedFields || "").toLowerCase();
               
@@ -98,7 +67,6 @@ const IncomingRequests = ({ userEmail }) => {
                   "verifiableCredential": [redactedVc]
               };
               
-          // --- 3. FULL LOGIC ---
           } else {
               presentation = {
                   "@context": ["https://www.w3.org/2018/credentials/v1"],
@@ -127,14 +95,27 @@ const IncomingRequests = ({ userEmail }) => {
     let proofData = null;
 
     try {
-      // --- 1. GENERATE PROOF BASED ON TYPE ---
       if (status === 'APPROVED') {
-          // Check for both ZKP_AGE and ZKP
           const isZKP = request.accessType === 'ZKP_AGE' || request.accessType === 'ZKP';
           
           if (isZKP) {
-            // FORCE Client-Side Mock Generation (No Backend Call)
-            proofData = generatePresentation(request, 'ZKP');
+            // 🔥 REAL BACKEND ZKP GENERATION 🔥
+            const zkpRes = await fetch(`http://localhost:8080/api/user/generate-proof/age?documentId=${request.document.id}`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Basic ' + btoa(`${userEmail}:${password}`) }
+            });
+            
+            if (!zkpRes.ok) {
+                const errMsg = await zkpRes.text();
+                throw new Error("Backend ZKP Generation Failed: " + errMsg);
+            }
+            
+            // Get the mathematical proof from the SnarkJS execution
+            const data = await zkpRes.json(); 
+            
+            // 👇 THE NEW WAY: The backend already built the perfect W3C format for us!
+            proofData = JSON.stringify(data.presentation);
+
           } else if (request.accessType === 'REDACTED') {
             proofData = generatePresentation(request, 'REDACTED');
           } else {
@@ -142,7 +123,7 @@ const IncomingRequests = ({ userEmail }) => {
           }
       }
 
-      // --- 2. SEND RESPONSE ---
+      // --- 2. SEND REAL DATA TO DATABASE ---
       const payload = {
         requestId: request.id,
         status: status,
@@ -150,7 +131,7 @@ const IncomingRequests = ({ userEmail }) => {
         generatedProof: proofData 
       };
 
-      await fetch('http://localhost:8080/api/user/respond-request', {
+      const submitRes = await fetch('http://localhost:8080/api/user/respond-request', {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
@@ -158,6 +139,8 @@ const IncomingRequests = ({ userEmail }) => {
         },
         body: JSON.stringify(payload)
       });
+      
+      if (!submitRes.ok) throw new Error("Failed to submit response to backend.");
       
       setRequests(requests.filter(r => r.id !== request.id));
       

@@ -54,7 +54,8 @@ function IssuedDocuments() {
   const [disclosureType, setDisclosureType] = useState('full'); 
   const [proofResult, setProofResult] = useState(null);
   const [viewMode, setViewMode] = useState(0);
-  // 👇 NEW: State for Redaction Fields (Default to all selected)
+  
+  // Redaction Fields (Default to all selected)
   const ALL_FIELDS = ['Name', 'Date of Birth', 'Reg No', 'Photo', 'Address'];
   const [selectedFields, setSelectedFields] = useState(ALL_FIELDS);
 
@@ -79,9 +80,9 @@ function IssuedDocuments() {
 
   const fetchIssuedDocuments = async () => {
     const currentUser = getCurrentUser();
-    const storedPassword = getStoredPassword(); 
+    const password = getStoredPassword(); // FIXED ESLINT ERROR
     
-    if (!currentUser || !storedPassword) {
+    if (!currentUser || !password) {
         setError("Session expired. Please log in.");
         setIsLoading(false);
         return;
@@ -91,7 +92,7 @@ function IssuedDocuments() {
       // 1. Fetch User's Documents
       const response = await fetch('http://localhost:8080/api/documents/my-documents', {
         headers: {
-          'Authorization': 'Basic ' + btoa(`${currentUser.email}:${storedPassword}`) 
+          'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`) 
         }
       });
 
@@ -109,7 +110,7 @@ function IssuedDocuments() {
       // 2. Fetch Available Verifiers for the Dropdown
       const verifierResponse = await fetch('http://localhost:8080/api/user/verifiers', {
         headers: {
-          'Authorization': 'Basic ' + btoa(`${currentUser.email}:${storedPassword}`) 
+          'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`) 
         }
       });
       if (verifierResponse.ok) {
@@ -137,7 +138,8 @@ function IssuedDocuments() {
     setIsSharingOpen(true);
     setViewMode(0);
   };
-  // 👇 NEW: Toggle Field Logic
+
+  // Toggle Field Logic
   const toggleField = (field) => {
     if (selectedFields.includes(field)) {
       setSelectedFields(selectedFields.filter(f => f !== field));
@@ -147,9 +149,11 @@ function IssuedDocuments() {
     setProofResult(null); // Reset proof if selection changes
   };
   
-  const handleGenerateProof = () => {
+  // MADE ASYNC TO SUPPORT REAL BACKEND ZKP FETCH
+  const handleGenerateProof = async () => {
     const vcString = selectedDocument.verifiableCredential;
     const currentUser = getCurrentUser();
+    const password = getStoredPassword();
     
     if (!currentUser) {
       setProofResult({ status: 'Error', message: "User session expired. Cannot generate proof." });
@@ -158,52 +162,38 @@ function IssuedDocuments() {
 
     try {
         const vcJson = JSON.parse(vcString);
-        const claimsNode = vcJson.credentialSubject.claims; 
-        const dob = claimsNode.back?.['Date Of Birth'] || claimsNode.back?.['DOB'];
-
         let verifiablePresentation;
         let disclosureMessage;
 
         // --- OPTION 1: ZKP (Age Only) ---
         if (disclosureType === 'zkp') {
-            const age = calculateAge(dob);
-            const isOver21 = age !== null && age >= 21;
             
-            disclosureMessage = isOver21 
-                ? "ZKP Generated: Proven age > 21 without revealing DOB." 
-                : "ZKP Warning: Age verification failed (Under 21).";
-            
-            // 1. Define the Raw Mathematical Proof (Mocked for Demo)
-            const rawZkProof = {
-                "curve": "bn128",
-                "scheme": "groth16",
-                "a": ["0x1a2b3c4d5e6f...", "0x4d5e6f7a8b9c..."],
-                "b": [
-                    ["0x7a8b9c0d1e2f...", "0x0d1e2f3a4b5c..."],
-                    ["0x3a4b5c6d7e8f...", "0x6d7e8f9a8b7c..."]
-                ],
-                "c": ["0x9a8b7c6d5e4f...", "0x6d5e4f3a2b1c..."]
-            };
+            // FIXED: CALLING THE BACKEND ENDPOINT FOR REAL W3C ZKP DATA
+            const res = await fetch(
+                `http://localhost:8080/api/user/generate-proof/age?documentId=${selectedDocument.id}`,
+                {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`) }
+                }
+            );
 
-            // 2. Embed it inside the Verifiable Presentation
-            verifiablePresentation = {
-                "@context": ["https://www.w3.org/2018/credentials/v1"],
-                "type": ["VerifiablePresentation", "AgeVerificationProof"],
-                "holder": currentUser.did,
-                "proof": {
-                    "type": "ZeroKnowledgeProof",
-                    "created": new Date().toISOString(),
-                    "proofValue": isOver21 ? rawZkProof : "INVALID-PROOF-FAILED-CHECK",
-                    "disclosedAttributes": { "age_over_21": isOver21 }
-                },
-                "verifiableCredential": [
-                   // Masked credential used for ZKP context
-                   { "id": "urn:uuid:masked-credential", "proofType": "ZKP" }
-                ]
-            };
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error("ZKP Generation Failed: " + errText);
+            }
+
+            const data = await res.json();
+            const isOver18 = data.isAdult;
+            
+            disclosureMessage = isOver18 
+                ? "ZKP Generated: Proven age >= 18 without revealing DOB." 
+                : "ZKP Warning: Age verification failed (Under 18).";
+            
+            // 👇 THE NEW WAY: The backend already built the perfect W3C format for us!
+            verifiablePresentation = data.presentation;
 
             setProofResult({
-                status: isOver21 ? 'Success' : 'Warning',
+                status: isOver18 ? 'Success' : 'Warning',
                 message: disclosureMessage,
                 presentation: JSON.stringify(verifiablePresentation, null, 2)
             });
@@ -214,7 +204,7 @@ function IssuedDocuments() {
              
              // Create a deep copy to redact
              const redactedVc = JSON.parse(JSON.stringify(vcJson));
-             // 👇 FIX: Dynamic Redaction based on selectedFields
+             // Dynamic Redaction based on selectedFields
              // Mapping UI Labels to VC JSON Keys
              const fieldMap = {
                  'Reg No': 'ID Number',
@@ -284,14 +274,14 @@ function IssuedDocuments() {
 
   const handleOnlineSend = async () => {
     const currentUser = getCurrentUser();
-    const password = getStoredPassword();
+    const password = getStoredPassword(); // FIXED ESLINT ERROR
 
     if (!proofResult || !proofResult.presentation) return;
     if (!selectedVerifier) {
         alert("Please select a verifier from the list first.");
         return;
     }
-    // FIX: Define allowed fields for Redacted mode (Matches the redaction logic in handleGenerateProof)
+    // Define allowed fields for Redacted mode (Matches the redaction logic in handleGenerateProof)
     let fieldsToSend = "ALL";
     if (disclosureType === 'redacted') {
         fieldsToSend = selectedFields.join(',');
@@ -353,20 +343,20 @@ function IssuedDocuments() {
             <Grid container spacing={4} sx={{mb: 2}}>
               {documents.map((document) => (
                 <Grid item xs={12} md={6} key={document.id}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                        {/* Render the Digital ID Card */}
-                        {document.verifiableCredential && (
-                            <DigitalIDCard vcData={JSON.parse(document.verifiableCredential)} />
-                        )}
-                        <Button 
-                            variant="contained" 
-                            startIcon={<ShareIcon />}
-                            onClick={() => openShareModal(document)}
-                            sx={{ minWidth: 200 }}
-                        >
-                            Use Credential
-                        </Button>
-                    </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      {/* Render the Digital ID Card */}
+                      {document.verifiableCredential && (
+                          <DigitalIDCard vcData={JSON.parse(document.verifiableCredential)} />
+                      )}
+                      <Button 
+                          variant="contained" 
+                          startIcon={<ShareIcon />}
+                          onClick={() => openShareModal(document)}
+                          sx={{ minWidth: 200 }}
+                      >
+                          Use Credential
+                      </Button>
+                  </Box>
                 </Grid>
               ))}
             </Grid>
@@ -404,7 +394,7 @@ function IssuedDocuments() {
             </Select>
           </FormControl>
           
-          {/* 👇 NEW: Redaction Selection UI */}
+          {/* Redaction Selection UI */}
           {disclosureType === 'redacted' && (
               <Box sx={{ mb: 3, p: 2, bgcolor: '#fff3e0', borderRadius: 2 }}>
                   <Typography variant="caption" fontWeight="bold" display="block" sx={{mb: 1}}>

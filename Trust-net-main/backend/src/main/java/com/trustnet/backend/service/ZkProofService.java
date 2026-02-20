@@ -2,10 +2,20 @@ package com.trustnet.backend.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.trustnet.backend.entity.Document;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
+import java.math.BigInteger;
+import java.time.Instant;
 import java.time.Year;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -13,82 +23,107 @@ import java.util.regex.Pattern;
 public class ZkProofService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RestTemplate restTemplate = new RestTemplate();
+    private final String NODE_ZKP_URL = "http://localhost:3001/generate-proof";
 
-    // The threshold year. If today is 2026, anyone born in 2008 or earlier is 18+.
-    private static final int ADULT_AGE_THRESHOLD = 18;
+    @Autowired
+    private BlockchainService blockchainService;
 
     public String generateAgeProof(Document document) throws Exception {
-        // 1. Parse the OCR Data from the Database (Private Input)
+
+        // 1️⃣ Extract birth year from OCR Data
         String ocrJson = document.getOcrData();
         if (ocrJson == null || ocrJson.isEmpty()) {
-            throw new RuntimeException("No OCR data found for this document.");
+            throw new RuntimeException("No OCR data found.");
         }
-        
+
         JsonNode root = objectMapper.readTree(ocrJson);
-        
-        // 2. Extract Date of Birth
-        // We look for "dob" inside the "front" object.
-        JsonNode frontNode = root.path("front");
-        String dobString = "";
-        
-        // Flexible check for different OCR keys
-        if (frontNode.has("dob")) {
-            dobString = frontNode.get("dob").asText();
-        } else if (frontNode.has("date_of_birth")) {
-            dobString = frontNode.get("date_of_birth").asText();
-        } else if (frontNode.has("Date of Birth")) {
-             dobString = frontNode.get("Date of Birth").asText();
-        } else {
-             // Fallback for demo: If OCR failed to read DOB, assume a valid year for testing
-             dobString = "01/01/2000"; 
-        }
-
-        // 3. Extract Year and Calculate Age
+        String dobString = root.path("front").path("dob").asText("01/01/2000");
         int birthYear = extractYear(dobString);
-        int currentYear = Year.now().getValue();
-        int age = currentYear - birthYear;
 
-        // 4. Validate Logic (The "Zero Knowledge" Check)
-        // If they are under 18, we REFUSE to generate a proof.
-        if (age < ADULT_AGE_THRESHOLD) {
-            throw new RuntimeException("Proof Generation Failed: User is under 18 (" + age + " years old).");
+        // 2️⃣ Call Node.js Service
+        ObjectNode requestPayload = objectMapper.createObjectNode();
+        requestPayload.put("birthYear", birthYear);
+        requestPayload.put("currentYear", Year.now().getValue());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> request = new HttpEntity<>(requestPayload.toString(), headers);
+
+        ResponseEntity<String> apiResponse = restTemplate.postForEntity(NODE_ZKP_URL, request, String.class);
+
+        if (!apiResponse.getStatusCode().is2xxSuccessful()) {
+            throw new RuntimeException("Node ZKP Service failed.");
         }
 
-        // 5. Generate the "Proof" 
-        // This JSON mimics the output of a real SNARK (Groth16) proof.
-        // The Verifier (Frontend) only sees this, not the birth year.
-        return createMockZkProof(age);
+        // 3️⃣ Parse the ZKP math from Node.js
+        JsonNode nodeResponse = objectMapper.readTree(apiResponse.getBody());
+        JsonNode proofJson = nodeResponse.get("proof");
+        JsonNode publicJson = nodeResponse.get("publicSignals");
+
+        // 4️⃣ Extract proof components for Blockchain Verification
+        List<BigInteger> pA = new ArrayList<>();
+        List<List<BigInteger>> pB = new ArrayList<>();
+        List<BigInteger> pC = new ArrayList<>();
+        List<BigInteger> pubSignals = new ArrayList<>();
+
+        for (int i = 0; i < 2; i++) pA.add(new BigInteger(proofJson.get("pi_a").get(i).asText()));
+        for (int i = 0; i < 2; i++) {
+            List<BigInteger> inner = new ArrayList<>();
+            inner.add(new BigInteger(proofJson.get("pi_b").get(i).get(0).asText()));
+            inner.add(new BigInteger(proofJson.get("pi_b").get(i).get(1).asText()));
+            pB.add(inner);
+        }
+
+        for (int i = 0; i < 2; i++) pC.add(new BigInteger(proofJson.get("pi_c").get(i).asText()));
+        for (int i = 0; i < publicJson.size(); i++) {pubSignals.add(new BigInteger(publicJson.get(i).asText()));}
+        System.out.println("Public Signals Size: " + pubSignals.size());
+        System.out.println("Public Signals: " + pubSignals);
+
+        // 5️⃣ Verify ON-CHAIN & Apply Security Check 🔥
+        boolean verifiedOnChain = blockchainService.verifyZkProof(pA, pB, pC, pubSignals);
+        System.out.println("Verified On Chain: " + verifiedOnChain);
+        
+        // SECURITY FIX: Must be verified on the blockchain AND output a true (1) signal
+        boolean isAdult = verifiedOnChain && publicJson.get(0).asText().equals("1"); 
+
+        // 6️⃣ Build Full W3C-Compatible Verifiable Presentation JSON
+        ObjectNode vp = objectMapper.createObjectNode();
+        vp.putArray("@context").add("https://www.w3.org/2018/credentials/v1");
+        vp.putArray("type").add("VerifiablePresentation").add("AgeVerificationProof");
+        vp.put("holder", "did:example:holder"); 
+        vp.put("documentId", document.getId());
+
+        ObjectNode proofWrapper = objectMapper.createObjectNode();
+        proofWrapper.put("type", "ZeroKnowledgeProof");
+        proofWrapper.put("created", Instant.now().toString());
+        proofWrapper.set("proofValue", proofJson);
+        proofWrapper.set("publicSignals", publicJson);
+        proofWrapper.put("verifiedOnChain", verifiedOnChain);
+
+        ObjectNode attributes = objectMapper.createObjectNode();
+        attributes.put("age_over_18", isAdult);
+        attributes.put("age_over_21", isAdult); 
+        proofWrapper.set("disclosedAttributes", attributes);
+
+        vp.set("proof", proofWrapper);
+
+        ObjectNode maskedCred = objectMapper.createObjectNode();
+        maskedCred.put("id", "urn:uuid:masked-credential");
+        maskedCred.put("proofType", "ZKP");
+        vp.putArray("verifiableCredential").add(maskedCred);
+
+        // 7️⃣ Return wrapper containing the easy boolean flag AND the full VP
+        ObjectNode outerResponse = objectMapper.createObjectNode();
+        outerResponse.put("isAdult", isAdult);
+        outerResponse.set("presentation", vp);
+
+        return objectMapper.writeValueAsString(outerResponse);
     }
 
     private int extractYear(String dob) {
-        // Look for 4 consecutive digits (e.g., 2000)
         Pattern pattern = Pattern.compile("\\b(19|20)\\d{2}\\b");
         Matcher matcher = pattern.matcher(dob);
-        
-        if (matcher.find()) {
-            return Integer.parseInt(matcher.group(0));
-        }
-        // Fallback for testing if format is messy
-        return 2000; 
-    }
-
-    private String createMockZkProof(int actualAge) {
-        // We return a "Proof" object. 
-        // Notice we DO NOT include the "actualAge" in the public output.
-        // We only say "isAdult": true
-        return String.format("""
-            {
-                "proof": {
-                    "a": ["0x1a2b3c...", "0x4d5e6f..."],
-                    "b": [["0x7a8b9c...", "0x0d1e2f..."], ["0x3a4b5c...", "0x6d7e8f..."]],
-                    "c": ["0x9a8b7c...", "0x6d5e4f..."]
-                },
-                "inputs": {
-                    "isValid": true,
-                    "ageCheck": "OVER_18",
-                    "timestamp": "%d"
-                }
-            }
-            """, System.currentTimeMillis());
+        return matcher.find() ? Integer.parseInt(matcher.group(0)) : 2000;
     }
 }
