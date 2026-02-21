@@ -4,7 +4,7 @@ import { getCurrentUser, getStoredPassword } from './authService';
 const API_URL = 'http://localhost:8080/api';
 
 /**
- * Utility to generate Basic Auth headers
+ * Utility to generate Basic Auth headers for requests
  */
 const getAuthHeaders = () => {
     const currentUser = getCurrentUser();
@@ -20,7 +20,26 @@ const getAuthHeaders = () => {
 };
 
 /**
- * Upload ID documents
+ * NEW: Cross-checks student details against the University Registry (Mock DB)
+ * This allows the UI to verify a student before or during the approval process.
+ */
+export const verifyStudentRegistry = async (admissionNo, name) => {
+    try {
+        const response = await axios.post(`${API_URL}/issuer/verify-student`, {
+            admissionNo,
+            name
+        }, {
+            headers: getAuthHeaders()
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Registry Verification Error:", error.response?.data || error.message);
+        throw error;
+    }
+};
+
+/**
+ * Uploads ID documents for verification
  */
 export const uploadIdCard = async (frontFile, backFile, selfieFile, issuerId) => {
     const formData = new FormData();
@@ -44,54 +63,47 @@ export const uploadIdCard = async (frontFile, backFile, selfieFile, issuerId) =>
 };
 
 /**
- * Fetch decrypted document
+ * Fetches pending documents for the Issuer dashboard
  */
-export const fetchDocument = async (documentId) => {
-    try {
-        const response = await axios.get(
-            `${API_URL}/documents/view/${documentId}`,
-            {
-                responseType: 'blob',
-                headers: getAuthHeaders()
-            }
-        );
-
-        return URL.createObjectURL(response.data);
-
-    } catch (error) {
-        console.error("Error fetching decrypted document:", error);
-        throw error;
-    }
+export const getPendingDocuments = async () => {
+    const response = await axios.get(`${API_URL}/issuer/documents/pending`, {
+        headers: getAuthHeaders()
+    });
+    return response.data;
 };
 
 /**
- * 🔐 Generate & Verify Age Proof (ZKP On-Chain)
+ * Approves a document. This will trigger the backend Cross-Check + Blockchain anchoring.
  */
-export const verifyAgeWithZKP = async (documentId) => {
+export const approveDocument = async (documentId) => {
+    const response = await axios.post(`${API_URL}/issuer/documents/${documentId}/approve`, {}, {
+        headers: getAuthHeaders()
+    });
+    return response.data;
+};
+
+/**
+ * Rejects a document.
+ */
+export const rejectDocument = async (documentId) => {
+    const response = await axios.post(`${API_URL}/issuer/documents/${documentId}/reject`, {}, {
+        headers: getAuthHeaders()
+    });
+    return response.data;
+};
+
+/**
+ * Fetches and decrypts a document for viewing
+ */
+export const fetchDocument = async (documentId) => {
     try {
-        const response = await axios.post(
-            `${API_URL}/verifier/generate-proof/age`,
-            null, // No body needed
-            {
-                params: { documentId: documentId }, // Sent as RequestParam
-                headers: getAuthHeaders()
-            }
-        );
-
-        // Backend already returns JSON stringified response
-        const data = typeof response.data === "string"
-            ? JSON.parse(response.data)
-            : response.data;
-
-        return {
-            verifiedOnChain: data.verifiedOnChain,
-            ageCheckResult: data.ageCheckResult,
-            birthYearUsed: data.birthYearUsed,
-            currentYearUsed: data.currentYearUsed
-        };
-
+        const response = await axios.get(`${API_URL}/documents/view/${documentId}`, {
+            responseType: 'blob',
+            headers: getAuthHeaders()
+        });
+        return URL.createObjectURL(response.data);
     } catch (error) {
-        console.error("ZKP Verification Error:", error);
+        console.error("Error fetching decrypted document:", error);
         throw error;
     }
 };
@@ -99,7 +111,10 @@ export const verifyAgeWithZKP = async (documentId) => {
 const documentService = {
     uploadIdCard,
     fetchDocument,
-    verifyAgeWithZKP
+    verifyStudentRegistry,
+    getPendingDocuments,
+    approveDocument,
+    rejectDocument
 };
 
 export default documentService;

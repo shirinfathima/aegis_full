@@ -1,5 +1,6 @@
 package com.trustnet.backend.config;
 
+import org.springframework.web.client.RestTemplate;
 import org.springframework.beans.factory.annotation.Value; // Import Value
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

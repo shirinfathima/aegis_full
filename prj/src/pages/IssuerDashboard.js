@@ -3,7 +3,8 @@ import {
   Box, Typography, Card, CardContent, Button, Grid, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Chip, Avatar,
   Tabs, Tab, Alert, List, ListItem, ListItemIcon, ListItemText, Divider,
-  Stack, LinearProgress, Dialog, DialogTitle, DialogContent, DialogActions
+  Stack, LinearProgress, Dialog, DialogTitle, DialogContent, DialogActions,
+  CircularProgress
 } from '@mui/material';
 import {
   AdminPanelSettings as IssuerIcon,
@@ -15,23 +16,26 @@ import {
   Dashboard as DashboardIcon,
   AccessTime as PendingIcon,
   CheckCircleOutline as CheckCircleOutlineIcon,
-  Visibility as ViewIcon
+  Visibility as ViewIcon,
+  VerifiedUser as VerifiedIcon
 } from '@mui/icons-material';
 import DashboardLayout from '../components/DashboardLayout';
 import { getCurrentUser, logout, getStoredPassword } from '../services/authService';
+import documentService from '../services/documentService'; // Use the service we updated
 import { useNavigate } from 'react-router-dom';
 
 function IssuerDashboard() {
   const navigate = useNavigate();
   const [currentUser] = useState(getCurrentUser());
-  const [currentTab, setCurrentTab] = useState(1); // Default to Verification Queue
+  const [currentTab, setCurrentTab] = useState(1);
   const [pendingDocs, setPendingDocs] = useState([]);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   
-  // --- NEW STATE FOR MODAL ---
+  // Modal & Registry State
   const [openModal, setOpenModal] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState(null);
+  const [registryCheck, setRegistryCheck] = useState({ loading: false, verified: null, message: '' });
 
   const [stats, setStats] = useState({
     totalIssued: 1240, 
@@ -40,23 +44,14 @@ function IssuerDashboard() {
   });
 
   const fetchPendingDocuments = useCallback(async () => {
-    const password = getStoredPassword();
-    if (!currentUser || !password) return;
-
     try {
-      const response = await fetch('http://localhost:8080/api/issuer/documents/pending', {
-        headers: {
-          'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`)
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setPendingDocs(data);
-      }
+      const data = await documentService.getPendingDocuments();
+      setPendingDocs(data);
     } catch (err) {
       console.error("Error fetching pending docs:", err);
+      setError("Failed to load pending documents.");
     }
-  }, [currentUser]);
+  }, []);
 
   useEffect(() => {
     if (currentUser?.role.toUpperCase() === 'ISSUER') {
@@ -64,60 +59,74 @@ function IssuerDashboard() {
     }
   }, [currentUser, fetchPendingDocuments]);
 
-  // --- ACTIONS ---
+  // --- REGISTRY CROSS-CHECK LOGIC ---
+  const performRegistryCheck = async (doc) => {
+    setRegistryCheck({ loading: true, verified: null, message: '' });
+    try {
+      // 1. Parse the OCR data string from the document
+      const ocrData = JSON.parse(doc.ocrData);
+      
+      // 2. Call our cross-check API (Step 5 logic)
+      // FIX: Access the nested 'front' object and use the exact keys from your OCR
+      const admissionNo = ocrData.front["Registration Number"];
+      const studentName = ocrData.front["Name"];
+      
+      const result = await documentService.verifyStudentRegistry(
+        admissionNo, 
+        studentName
+      );
+      
+      setRegistryCheck({ loading: false, verified: true, message: result.message });
+    } catch (err) {
+      setRegistryCheck({ 
+        loading: false, 
+        verified: false, 
+        message: err.response?.data?.message || "Student not found in University Registry." 
+      });
+    }
+  };
 
   const handleOpenReview = (doc) => {
     setSelectedDoc(doc);
     setOpenModal(true);
+    performRegistryCheck(doc); // Trigger check as soon as modal opens
   };
 
   const handleCloseReview = () => {
     setOpenModal(false);
     setSelectedDoc(null);
+    setRegistryCheck({ loading: false, verified: null, message: '' });
   };
 
   const handleApprove = async () => {
     if(!selectedDoc) return;
-    const docId = selectedDoc.id;
-    const password = getStoredPassword();
     setError('');
     setSuccessMsg('');
 
     try {
-      const response = await fetch(`http://localhost:8080/api/issuer/documents/${docId}/approve`, {
-        method: 'POST',
-        headers: { 'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`) }
-      });
-
-      if (!response.ok) throw new Error("Approval failed");
-
-      setSuccessMsg(`Document ${docId} Approved & Data Hard Deleted!`);
+      await documentService.approveDocument(selectedDoc.id);
+      setSuccessMsg(`Document #${selectedDoc.id} successfully verified and anchored to Blockchain.`);
       setStats(prev => ({ ...prev, totalIssued: prev.totalIssued + 1 }));
-      handleCloseReview(); // Close modal
-      fetchPendingDocuments(); // Refresh list (item should disappear)
+      handleCloseReview();
+      fetchPendingDocuments();
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.message || "Blockchain anchoring failed.");
     }
   };
 
   const handleReject = async () => {
     if(!selectedDoc) return;
-    const docId = selectedDoc.id;
-    const password = getStoredPassword();
     try {
-      await fetch(`http://localhost:8080/api/issuer/documents/${docId}/reject`, {
-        method: 'POST',
-        headers: { 'Authorization': 'Basic ' + btoa(`${currentUser.email}:${password}`) }
-      });
+      await documentService.rejectDocument(selectedDoc.id);
+      setSuccessMsg("Document rejected and temporary data cleared.");
       handleCloseReview();
       fetchPendingDocuments();
     } catch (err) {
-      console.error(err);
+      setError("Failed to reject document.");
     }
   };
 
-  // --- RENDER HELPERS ---
-
+  // ... (StatCard, AssignmentIconWithBadge, issuerSidebar helpers stay the same) ...
   const StatCard = ({ title, value, icon, color }) => (
     <Card sx={{ height: '100%' }}>
       <CardContent>
@@ -134,22 +143,7 @@ function IssuerDashboard() {
     <Box sx={{ position: 'relative', display: 'flex' }}>
       <DocIcon />
       {count > 0 && (
-        <Box
-          sx={{
-            position: 'absolute',
-            top: -4,
-            right: -4,
-            bgcolor: 'error.main',
-            color: 'white',
-            borderRadius: '50%',
-            width: 16,
-            height: 16,
-            fontSize: 10,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
+        <Box sx={{ position: 'absolute', top: -4, right: -4, bgcolor: 'error.main', color: 'white', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           {count}
         </Box>
       )}
@@ -216,7 +210,7 @@ function IssuerDashboard() {
         </Tabs>
       </Box>
 
-      {/* --- OVERVIEW TAB (Uses stats, StatCard, LinearProgress) --- */}
+      {/* Overview Tab Content */}
       {currentTab === 0 && (
         <Grid container spacing={3}>
           <Grid item xs={12} md={4}>
@@ -228,27 +222,10 @@ function IssuerDashboard() {
           <Grid item xs={12} md={4}>
             <StatCard title="Fraud Alerts" value={stats.fraudDetected} icon={<FraudIcon />} color="error" />
           </Grid>
-          <Grid item xs={12}>
-            <Card sx={{ mt: 2 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>System Health</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Typography variant="body2" sx={{ minWidth: 150 }}>Blockchain Node</Typography>
-                  <LinearProgress variant="determinate" value={100} color="success" sx={{ flexGrow: 1, height: 8, borderRadius: 5 }} />
-                  <Typography variant="body2" sx={{ ml: 2 }}>Online</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Typography variant="body2" sx={{ minWidth: 150 }}>AI Match Engine</Typography>
-                  <LinearProgress variant="determinate" value={95} color="primary" sx={{ flexGrow: 1, height: 8, borderRadius: 5 }} />
-                  <Typography variant="body2" sx={{ ml: 2 }}>Active</Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
         </Grid>
       )}
 
-      {/* --- VERIFICATION QUEUE TAB --- */}
+      {/* Verification Queue Table */}
       {currentTab === 1 && (
         <Card sx={{ boxShadow: 3 }}>
           <CardContent sx={{ p: 0 }}>
@@ -256,16 +233,15 @@ function IssuerDashboard() {
               <Box sx={{ py: 8, textAlign: 'center' }}>
                 <CheckCircleOutlineIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
                 <Typography variant="h6" color="text.secondary">All Caught Up!</Typography>
-                <Typography variant="body2" color="text.disabled">No pending documents to verify.</Typography>
               </Box>
             ) : (
               <TableContainer>
-                <Table sx={{ minWidth: 650 }}>
+                <Table>
                   <TableHead sx={{ bgcolor: 'grey.100' }}>
                     <TableRow>
                       <TableCell><strong>ID</strong></TableCell>
-                      <TableCell><strong>Document Type</strong></TableCell>
-                      <TableCell><strong>Status</strong></TableCell>
+                      <TableCell><strong>Document Name</strong></TableCell>
+                      <TableCell><strong>AI Score</strong></TableCell>
                       <TableCell align="center"><strong>Review</strong></TableCell>
                     </TableRow>
                   </TableHead>
@@ -274,14 +250,15 @@ function IssuerDashboard() {
                       <TableRow key={doc.id} hover>
                         <TableCell>#{doc.id}</TableCell>
                         <TableCell>{doc.documentName}</TableCell>
-                        <TableCell><Chip label="Pending" color="warning" size="small" /></TableCell>
-                        <TableCell align="center">
-                          <Button 
-                            variant="contained" 
+                        <TableCell>
+                          <Chip 
+                            label={`${doc.faceMatchConfidence}% AI Match`} 
                             size="small" 
-                            startIcon={<ViewIcon />}
-                            onClick={() => handleOpenReview(doc)}
-                          >
+                            color={doc.faceMatchConfidence > 80 ? "success" : "warning"} 
+                          />
+                        </TableCell>
+                        <TableCell align="center">
+                          <Button variant="contained" size="small" startIcon={<ViewIcon />} onClick={() => handleOpenReview(doc)}>
                             Review Evidence
                           </Button>
                         </TableCell>
@@ -295,72 +272,60 @@ function IssuerDashboard() {
         </Card>
       )}
 
-      {/* --- REVIEW EVIDENCE MODAL --- */}
+      {/* --- PRODUCTION REVIEW MODAL WITH REGISTRY CHECK --- */}
       <Dialog open={openModal} onClose={handleCloseReview} maxWidth="lg" fullWidth>
-        <DialogTitle sx={{ bgcolor: '#f5f5f5', borderBottom: 1, borderColor: 'divider' }}>
+        <DialogTitle sx={{ bgcolor: '#f5f5f5', borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           Document Review: #{selectedDoc?.id}
+          
+          {/* Registry Status Badge */}
+          {!registryCheck.loading && registryCheck.verified !== null && (
+            <Chip 
+              icon={registryCheck.verified ? <VerifiedIcon /> : <FraudIcon />}
+              label={registryCheck.verified ? "University Verified" : "Registry Mismatch"}
+              color={registryCheck.verified ? "success" : "error"}
+              variant="filled"
+            />
+          )}
         </DialogTitle>
         <DialogContent sx={{ mt: 2 }}>
           {selectedDoc && (
             <Grid container spacing={2}>
-              {/* Front Image */}
+              {/* Status Alert Area */}
+              <Grid item xs={12}>
+                {registryCheck.loading ? (
+                  <Alert severity="info" icon={<CircularProgress size={20} />}>Cross-checking with University Registry Database...</Alert>
+                ) : registryCheck.verified === false ? (
+                  <Alert severity="error"><strong>CRITICAL:</strong> {registryCheck.message}</Alert>
+                ) : registryCheck.verified === true ? (
+                  <Alert severity="success">Student details match the University Registry.</Alert>
+                ) : null}
+              </Grid>
+
+              {/* Image Evidence display stays similar */}
               <Grid item xs={12} md={4}>
                 <Typography variant="subtitle2" gutterBottom align="center">ID Front</Typography>
-                <Paper variant="outlined" sx={{ p: 1, textAlign: 'center', bgcolor: '#fafafa' }}>
-                  {selectedDoc.tempDocData ? (
-                    <img 
-                      src={`data:image/jpeg;base64,${selectedDoc.tempDocData}`} 
-                      alt="Front" 
-                      style={{ maxWidth: '100%', maxHeight: '300px', objectFit: 'contain' }} 
-                    />
-                  ) : <Typography color="error">Data Missing</Typography>}
+                <Paper variant="outlined" sx={{ p: 1, textAlign: 'center' }}>
+                  <img src={`data:image/jpeg;base64,${selectedDoc.tempDocData}`} alt="Front" style={{ maxWidth: '100%', maxHeight: '250px' }} />
                 </Paper>
               </Grid>
-
-              {/* Back Image */}
               <Grid item xs={12} md={4}>
                 <Typography variant="subtitle2" gutterBottom align="center">ID Back</Typography>
-                <Paper variant="outlined" sx={{ p: 1, textAlign: 'center', bgcolor: '#fafafa' }}>
-                  {selectedDoc.tempDocBackData ? (
-                    <img 
-                      src={`data:image/jpeg;base64,${selectedDoc.tempDocBackData}`} 
-                      alt="Back" 
-                      style={{ maxWidth: '100%', maxHeight: '300px', objectFit: 'contain' }} 
-                    />
-                  ) : <Typography color="text.secondary">No Back Side</Typography>}
+                <Paper variant="outlined" sx={{ p: 1, textAlign: 'center' }}>
+                  <img src={`data:image/jpeg;base64,${selectedDoc.tempDocBackData}`} alt="Back" style={{ maxWidth: '100%', maxHeight: '250px' }} />
                 </Paper>
               </Grid>
-
-              {/* Selfie Image */}
               <Grid item xs={12} md={4}>
                 <Typography variant="subtitle2" gutterBottom align="center">Live Selfie</Typography>
-                <Paper variant="outlined" sx={{ p: 1, textAlign: 'center', bgcolor: '#fafafa' }}>
-                  {selectedDoc.tempSelfieData ? (
-                    <img 
-                      src={`data:image/jpeg;base64,${selectedDoc.tempSelfieData}`} 
-                      alt="Selfie" 
-                      style={{ maxWidth: '100%', maxHeight: '300px', objectFit: 'contain' }} 
-                    />
-                  ) : <Typography color="error">Data Missing</Typography>}
+                <Paper variant="outlined" sx={{ p: 1, textAlign: 'center' }}>
+                  <img src={`data:image/jpeg;base64,${selectedDoc.tempSelfieData}`} alt="Selfie" style={{ maxWidth: '100%', maxHeight: '250px' }} />
                 </Paper>
-              </Grid>
-
-              <Grid item xs={12}>
-                <Alert severity="info" sx={{ mt: 2 }}>
-                  <strong>Note:</strong> Approving or Rejecting this document will permanently delete these images from the database.
-                </Alert>
               </Grid>
             </Grid>
           )}
         </DialogContent>
         <DialogActions sx={{ p: 3, borderTop: 1, borderColor: 'divider' }}>
           <Button onClick={handleCloseReview} color="inherit">Cancel</Button>
-          <Button 
-            onClick={handleReject} 
-            color="error" 
-            variant="outlined" 
-            startIcon={<RejectIcon />}
-          >
+          <Button onClick={handleReject} color="error" variant="outlined" startIcon={<RejectIcon />}>
             Reject Document
           </Button>
           <Button 
@@ -368,12 +333,12 @@ function IssuerDashboard() {
             color="success" 
             variant="contained" 
             startIcon={<ApproveIcon />}
+            disabled={registryCheck.verified === false} // DISABLED IF MISMATCH
           >
             Approve & Anchor
           </Button>
         </DialogActions>
       </Dialog>
-
     </DashboardLayout>
   );
 }
