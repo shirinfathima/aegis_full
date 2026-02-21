@@ -33,4 +33,9 @@ public class appconfig {
     public Web3j web3j() {
         return Web3j.build(new HttpService(amoyRpcUrl));
     }
+
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
+    }
 }

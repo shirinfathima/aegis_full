@@ -1,62 +1,81 @@
 const express = require("express");
-const { exec } = require("child_process");
-const fs = require("fs");
+const snarkjs = require("snarkjs");
+const { buildPoseidon } = require("circomlibjs");
 
 const app = express();
 app.use(express.json());
 
+/* =========================================
+   1️⃣ Generate Commitment (Issuer Side)
+========================================= */
+app.post("/generate-commitment", async (req, res) => {
+    try {
+        const { studentDidNumeric, expiryYear, secret } = req.body;
+
+        if (!studentDidNumeric || !expiryYear || !secret) {
+            return res.status(400).send("Missing parameters");
+        }
+
+        const poseidon = await buildPoseidon();
+
+        const hash = poseidon([
+            BigInt(studentDidNumeric),
+            BigInt(expiryYear),
+            BigInt(secret)
+        ]);
+
+        const commitment = poseidon.F.toString(hash);
+
+        res.json({ commitment });
+
+    } catch (err) {
+        console.error("❌ Commitment Error:", err);
+        res.status(500).send("Commitment generation failed");
+    }
+});
+
+
+/* =========================================
+   2️⃣ Generate ZKP Proof (In-Memory)
+========================================= */
 app.post("/generate-proof", async (req, res) => {
     try {
-        const { birthYear } = req.body;
+        const {
+            studentDidNumeric,
+            expiryYear,
+            universitySecret,
+            universityCommitment
+        } = req.body;
 
-        if (!birthYear) {
-            return res.status(400).send("birthYear is required");
+        if (!studentDidNumeric || !expiryYear || !universitySecret || !universityCommitment) {
+            return res.status(400).send("Missing proof parameters");
         }
 
         const currentYear = new Date().getFullYear();
 
         const input = {
-            birthYear: birthYear,
-            currentYear: currentYear
+            current_year: currentYear.toString(),
+            university_commitment: universityCommitment.toString(),
+            student_did_numeric: studentDidNumeric.toString(),
+            expiry_year: expiryYear.toString(),
+            university_secret: universitySecret.toString()
         };
 
-        // Write the input JSON for SnarkJS
-        fs.writeFileSync("input.json", JSON.stringify(input));
+        console.log("🚀 Generating In-Memory Proof...");
 
-        // Change this line to use final.zkey!
-        const command = "npx snarkjs groth16 fullprove input.json age_check_js/age_check.wasm age_check_final.zkey proof.json public.json";
+        const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+            input,
+            "student_verification_js/student_verification.wasm",
+            "student_final.zkey"
+        );
 
-        console.log("Running command:", command);
+        console.log("✅ Proof generated successfully (RAM)");
 
-        // Execute SnarkJS
-        exec(command, (error, stdout, stderr) => {
-            if (error) {
-                console.error("❌ SnarkJS Error Details:\n", stderr || error.message);
-                return res.status(500).send("Proof generation failed. Check Node console for details.");
-            }
-
-            try {
-                // Read the generated proof files
-                const proof = JSON.parse(fs.readFileSync("proof.json"));
-                const publicSignals = JSON.parse(fs.readFileSync("public.json"));
-
-                console.log("✅ Proof generated successfully!");
-
-                // Send back to Spring Boot
-                res.json({
-                    proof,
-                    publicSignals,
-                    verified: true
-                });
-            } catch (fsError) {
-                console.error("❌ Error reading generated proof files:", fsError);
-                return res.status(500).send("Proof files were not generated.");
-            }
-        });
+        res.json({ proof, publicSignals });
 
     } catch (err) {
-        console.error("❌ Server Error:", err);
-        res.status(500).send(err.message);
+        console.error("❌ ZKP Generation Error:", err);
+        res.status(500).send("ZKP Generation Failed: " + err.message);
     }
 });
 

@@ -29,26 +29,21 @@ public class Document {
     private String documentType; 
     private LocalDateTime uploadTime;
     
-    // Note: You had both 'txHash' and 'blockchainTransactionHash'. 
-    // keeping both to avoid breaking your existing logic.
     private String txHash; 
 
     @Enumerated(EnumType.STRING)
     private VerificationStatus status;
 
-    // --- TEMPORARY STORAGE (Added for Issuer Review) ---
-    // These hold the raw images until the Issuer approves them.
-    // After approval/rejection, these are set to NULL to save space/privacy.
-    
-    @Column(name = "temp_doc_data", length = 10000000) // Increase size for large images
-    private byte[] tempDocData; // FRONT Side Image
+    // --- TEMPORARY STORAGE ---
+    @Column(name = "temp_doc_data", length = 10000000)
+    private byte[] tempDocData; 
 
     @Column(name = "temp_doc_back_data", length = 10000000)
-    private byte[] tempDocBackData; // BACK Side Image
+    private byte[] tempDocBackData; 
 
     @Column(name = "temp_selfie_data", length = 10000000)
-    private byte[] tempSelfieData; // Live Selfie Image
-    // ---------------------------------------------------------
+    private byte[] tempSelfieData; 
+    // -------------------------
 
     @Column(columnDefinition = "TEXT")
     private String ocrData;
@@ -61,20 +56,30 @@ public class Document {
     private String verifiableCredential;
     
     private String vcHash; 
-    private String blockchainTransactionHash;// To store the blockchain transaction hash for proof of anchoring
-    private String anchoringTime;// NEW FIELD: To store the timestamp of when the document was anchored on-chain
-    private Long issuerId; // Field to store the ID of the selected issuer
+    private String blockchainTransactionHash;
+    private String anchoringTime;
+    private Long issuerId; 
 
-    @Transient // Tells Database: "Do not save this!"
+    // 🔥 NEW ZKP PRODUCTION FIELDS 🔥
+    @Column(name = "zk_secret")
+    private String zkSecret; // The random secret generated during issuance
+
+    @Column(name = "zk_commitment", length = 500)
+    private String zkCommitment; // The Poseidon hash stored on-chain/in-DB
+    // ---------------------------------
+
+    @Transient
     private byte[] fileData;
 
     // --- HELPER METHODS ---
-    // These allow the Verifier Controller to read data safely
     public String getTxHash() { return blockchainTransactionHash; }
     public String getFileName() { return documentName; }
 
+    // Note: Lombok's @Data handles getFileData/setFileData, 
+    // but keeping your manual ones is safe.
     public byte[] getFileData() { return fileData; }
     public void setFileData(byte[] fileData) { this.fileData = fileData; }
+
     @PrePersist
     protected void onCreate() {
         if (uploadTime == null) { uploadTime = LocalDateTime.now(); }

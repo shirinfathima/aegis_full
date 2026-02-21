@@ -4,94 +4,124 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.trustnet.backend.entity.Document;
+import com.trustnet.backend.entity.User;
+import com.trustnet.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.http.*;
 
 import java.math.BigInteger;
 import java.time.Instant;
-import java.time.Year;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Service
 public class ZkProofService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final RestTemplate restTemplate = new RestTemplate();
-    private final String NODE_ZKP_URL = "http://localhost:3001/generate-proof";
+
+    @Autowired
+    private RestTemplate restTemplate;
 
     @Autowired
     private BlockchainService blockchainService;
 
-    public String generateAgeProof(Document document) throws Exception {
+    @Autowired
+    private UserRepository userRepository;
 
-        // 1️⃣ Extract birth year from OCR Data
-        String ocrJson = document.getOcrData();
-        if (ocrJson == null || ocrJson.isEmpty()) {
+    private final String NODE_ZKP_URL = "http://localhost:3001/generate-proof";
+
+    /**
+     * MAIN METHOD — Generates Student ZKP and verifies on-chain
+     */
+    public String generateStudentProof(Document document) throws Exception {
+
+        // 1️⃣ Validate OCR
+        if (document.getOcrData() == null || document.getOcrData().isEmpty()) {
             throw new RuntimeException("No OCR data found.");
         }
 
-        JsonNode root = objectMapper.readTree(ocrJson);
-        String dobString = root.path("front").path("dob").asText("01/01/2000");
-        int birthYear = extractYear(dobString);
+        JsonNode root = objectMapper.readTree(document.getOcrData());
 
-        // 2️⃣ Call Node.js Service
-        ObjectNode requestPayload = objectMapper.createObjectNode();
-        requestPayload.put("birthYear", birthYear);
-        requestPayload.put("currentYear", Year.now().getValue());
+        // 2️⃣ Fetch User & Convert DID to BigInteger
+        User user = userRepository.findById(document.getUserId())
+                .orElseThrow(() -> new RuntimeException("User not found."));
+
+        String did = user.getDid();
+        String address = did.substring(did.lastIndexOf(":") + 1);
+
+        if (!address.startsWith("0x")) {
+            throw new RuntimeException("Invalid DID format.");
+        }
+
+        BigInteger studentDidNumeric =
+                new BigInteger(address.substring(2), 16);
+
+        // 3️⃣ Extract Expiry Year
+        String validity =
+                root.path("back").path("Validity").asText("2026");
+
+        int expiryYear =
+                Integer.parseInt(validity.replaceAll("[^0-9]", ""));
+
+        // 4️⃣ Fetch stored ZK data
+        String secret = document.getZkSecret();
+        String commitment = document.getZkCommitment();
+
+        if (secret == null || commitment == null) {
+            throw new RuntimeException("Missing ZK issuance data.");
+        }
+
+        // 5️⃣ Call Node.js Prover (In-Memory)
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("studentDidNumeric", studentDidNumeric.toString());
+        payload.put("expiryYear", expiryYear);
+        payload.put("universitySecret", secret);
+        payload.put("universityCommitment", commitment);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<String> request = new HttpEntity<>(requestPayload.toString(), headers);
 
-        ResponseEntity<String> apiResponse = restTemplate.postForEntity(NODE_ZKP_URL, request, String.class);
+        HttpEntity<String> request =
+                new HttpEntity<>(payload.toString(), headers);
 
-        if (!apiResponse.getStatusCode().is2xxSuccessful()) {
-            throw new RuntimeException("Node ZKP Service failed.");
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        NODE_ZKP_URL,
+                        request,
+                        String.class
+                );
+
+        if (!response.getStatusCode().is2xxSuccessful()) {
+            throw new RuntimeException("Node ZKP service failed.");
         }
 
-        // 3️⃣ Parse the ZKP math from Node.js
-        JsonNode nodeResponse = objectMapper.readTree(apiResponse.getBody());
-        JsonNode proofJson = nodeResponse.get("proof");
-        JsonNode publicJson = nodeResponse.get("publicSignals");
+        JsonNode responseJson =
+                objectMapper.readTree(response.getBody());
 
-        // 4️⃣ Extract proof components for Blockchain Verification
-        List<BigInteger> pA = new ArrayList<>();
-        List<List<BigInteger>> pB = new ArrayList<>();
-        List<BigInteger> pC = new ArrayList<>();
-        List<BigInteger> pubSignals = new ArrayList<>();
+        JsonNode proofJson = responseJson.get("proof");
+        JsonNode publicJson = responseJson.get("publicSignals");
 
-        for (int i = 0; i < 2; i++) pA.add(new BigInteger(proofJson.get("pi_a").get(i).asText()));
-        for (int i = 0; i < 2; i++) {
-            List<BigInteger> inner = new ArrayList<>();
-            inner.add(new BigInteger(proofJson.get("pi_b").get(i).get(0).asText()));
-            inner.add(new BigInteger(proofJson.get("pi_b").get(i).get(1).asText()));
-            pB.add(inner);
-        }
+        // 6️⃣ Delegate On-Chain Verification
+        boolean verifiedOnChain =
+                verifyZkProofOnChain(proofJson, publicJson);
 
-        for (int i = 0; i < 2; i++) pC.add(new BigInteger(proofJson.get("pi_c").get(i).asText()));
-        for (int i = 0; i < publicJson.size(); i++) {pubSignals.add(new BigInteger(publicJson.get(i).asText()));}
-        System.out.println("Public Signals Size: " + pubSignals.size());
-        System.out.println("Public Signals: " + pubSignals);
+        // Circuit outputs isValid = 1 if checks pass
+        boolean isActiveStudent =
+                verifiedOnChain &&
+                publicJson.get(0).asText().equals("1");
 
-        // 5️⃣ Verify ON-CHAIN & Apply Security Check 🔥
-        boolean verifiedOnChain = blockchainService.verifyZkProof(pA, pB, pC, pubSignals);
-        System.out.println("Verified On Chain: " + verifiedOnChain);
-        
-        // SECURITY FIX: Must be verified on the blockchain AND output a true (1) signal
-        boolean isAdult = verifiedOnChain && publicJson.get(0).asText().equals("1"); 
-
-        // 6️⃣ Build Full W3C-Compatible Verifiable Presentation JSON
+        // 7️⃣ Build Verifiable Presentation
         ObjectNode vp = objectMapper.createObjectNode();
-        vp.putArray("@context").add("https://www.w3.org/2018/credentials/v1");
-        vp.putArray("type").add("VerifiablePresentation").add("AgeVerificationProof");
-        vp.put("holder", "did:example:holder"); 
+
+        vp.putArray("@context")
+                .add("https://www.w3.org/2018/credentials/v1");
+
+        vp.putArray("type")
+                .add("VerifiablePresentation")
+                .add("StudentVerificationProof");
+
+        vp.put("holder", user.getDid());
         vp.put("documentId", document.getId());
 
         ObjectNode proofWrapper = objectMapper.createObjectNode();
@@ -102,28 +132,60 @@ public class ZkProofService {
         proofWrapper.put("verifiedOnChain", verifiedOnChain);
 
         ObjectNode attributes = objectMapper.createObjectNode();
-        attributes.put("age_over_18", isAdult);
-        attributes.put("age_over_21", isAdult); 
-        proofWrapper.set("disclosedAttributes", attributes);
+        attributes.put("is_active_enrollment", isActiveStudent);
+        attributes.put("university_affiliation_verified", isActiveStudent);
 
+        proofWrapper.set("disclosedAttributes", attributes);
         vp.set("proof", proofWrapper);
 
-        ObjectNode maskedCred = objectMapper.createObjectNode();
-        maskedCred.put("id", "urn:uuid:masked-credential");
-        maskedCred.put("proofType", "ZKP");
-        vp.putArray("verifiableCredential").add(maskedCred);
+        ObjectNode outer = objectMapper.createObjectNode();
+        outer.put("success", isActiveStudent);
+        outer.set("presentation", vp);
 
-        // 7️⃣ Return wrapper containing the easy boolean flag AND the full VP
-        ObjectNode outerResponse = objectMapper.createObjectNode();
-        outerResponse.put("isAdult", isAdult);
-        outerResponse.set("presentation", vp);
-
-        return objectMapper.writeValueAsString(outerResponse);
+        return objectMapper.writeValueAsString(outer);
     }
 
-    private int extractYear(String dob) {
-        Pattern pattern = Pattern.compile("\\b(19|20)\\d{2}\\b");
-        Matcher matcher = pattern.matcher(dob);
-        return matcher.find() ? Integer.parseInt(matcher.group(0)) : 2000;
+    /**
+     * 🔥 CLEAN ARCHITECTURE: Extract proof → Delegate to BlockchainService
+     */
+    private boolean verifyZkProofOnChain(
+            JsonNode proofJson,
+            JsonNode publicSignalsJson
+    ) throws Exception {
+
+        // G1 - pi_a
+        List<BigInteger> pA = Arrays.asList(
+                new BigInteger(proofJson.get("pi_a").get(0).asText()),
+                new BigInteger(proofJson.get("pi_a").get(1).asText())
+        );
+
+        // G2 - pi_b (MANDATORY SWAP 🔥)
+        List<List<BigInteger>> pB = Arrays.asList(
+                Arrays.asList(
+                        new BigInteger(proofJson.get("pi_b").get(0).get(1).asText()),
+                        new BigInteger(proofJson.get("pi_b").get(0).get(0).asText())
+                ),
+                Arrays.asList(
+                        new BigInteger(proofJson.get("pi_b").get(1).get(1).asText()),
+                        new BigInteger(proofJson.get("pi_b").get(1).get(0).asText())
+                )
+        );
+
+        // G1 - pi_c
+        List<BigInteger> pC = Arrays.asList(
+                new BigInteger(proofJson.get("pi_c").get(0).asText()),
+                new BigInteger(proofJson.get("pi_c").get(1).asText())
+        );
+
+        // Public Signals
+        List<BigInteger> pubSignals = new ArrayList<>();
+        publicSignalsJson.forEach(signal ->
+                pubSignals.add(new BigInteger(signal.asText()))
+        );
+
+        // Delegate to blockchain layer
+        return blockchainService.verifyZkProof(
+                pA, pB, pC, pubSignals
+        );
     }
 }

@@ -9,6 +9,7 @@ import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.tx.RawTransactionManager;
+import org.web3j.tx.ReadonlyTransactionManager;
 import org.web3j.tx.gas.ContractGasProvider;
 import org.web3j.tuples.generated.Tuple2;
 import org.web3j.protocol.core.methods.request.Transaction;
@@ -20,7 +21,6 @@ import java.util.List;
 @Service
 public class BlockchainService {
 
-    // Existing DocumentAnchor contract
     private static final String DOCUMENT_CONTRACT_ADDRESS =
             "0xEE6bCE5BA477fCAe5699FE89b6fa8f75A94148eB";
 
@@ -39,7 +39,7 @@ public class BlockchainService {
         this.web3j = web3j;
 
         if (privateKey == null || privateKey.isEmpty() || privateKey.length() < 64) {
-            throw new Exception("AMOY_PRIVATE_KEY property value is missing or invalid.");
+            throw new Exception("AMOY_PRIVATE_KEY missing or invalid.");
         }
 
         String cleanedKey = privateKey.startsWith("0x")
@@ -51,7 +51,6 @@ public class BlockchainService {
         RawTransactionManager txManager =
                 new RawTransactionManager(web3j, credentials, chainId);
 
-        // Gas Provider
         ContractGasProvider dynamicGasProvider = new ContractGasProvider() {
 
             public BigInteger getGasPrice(String contractFunc) {
@@ -92,7 +91,7 @@ public class BlockchainService {
             }
         };
 
-        // Load DocumentAnchor contract
+        // Anchor contract (needs signing)
         this.deployedContract = DocumentAnchor.load(
                 DOCUMENT_CONTRACT_ADDRESS,
                 web3j,
@@ -100,17 +99,20 @@ public class BlockchainService {
                 dynamicGasProvider
         );
 
-        // 🔥 Load ZK Verifier Contract
+        // 🔐 Verifier contract (READ ONLY — no gas, no signing)
+        ReadonlyTransactionManager readOnlyTxManager =
+                new ReadonlyTransactionManager(web3j, credentials.getAddress());
+
         this.zkVerifier = Groth16Verifier.load(
                 verifierAddress,
                 web3j,
-                txManager,
+                readOnlyTxManager,
                 dynamicGasProvider
         );
     }
 
     // ==========================
-    // EXISTING CID FUNCTIONS
+    // DOCUMENT ANCHORING
     // ==========================
 
     public TransactionReceipt anchorDocumentCID(Long userId, String cidHash)
@@ -124,20 +126,6 @@ public class BlockchainService {
                 .send();
     }
 
-    public String getAnchoredCID(Long userId) throws Exception {
-
-        BigInteger solUserId = BigInteger.valueOf(userId);
-
-        Tuple2<BigInteger, BigInteger> result =
-                deployedContract.getDocumentCID(solUserId).send();
-
-        BigInteger cid = result.component1();
-        BigInteger timestamp = result.component2();
-
-        return "CID: " + cid.toString()
-                + " | Anchored at: " + timestamp.toString();
-    }
-
     public BigInteger getRawAnchoredCID(Long userId) throws Exception {
 
         BigInteger solUserId = BigInteger.valueOf(userId);
@@ -149,7 +137,7 @@ public class BlockchainService {
     }
 
     // ==========================
-    // 🔐 NEW ZK VERIFICATION METHOD
+    // 🔐 ZK VERIFICATION (VIEW CALL)
     // ==========================
 
     public boolean verifyZkProof(
@@ -161,15 +149,24 @@ public class BlockchainService {
 
         System.out.println("Calling verifier contract...");
         System.out.println("Verifier Address: " + zkVerifier.getContractAddress());
-        System.out.println("Public Signals sent to contract: " + pubSignals);
-            
-        boolean result = zkVerifier
-            .verifyProof(pA, pB, pC, pubSignals)
-            .send();
+
+        // Convert Lists → Arrays
+        BigInteger[] aArray = pA.toArray(new BigInteger[0]);
+
+        BigInteger[][] bArray = new BigInteger[2][2];
+        bArray[0] = pB.get(0).toArray(new BigInteger[0]);
+        bArray[1] = pB.get(1).toArray(new BigInteger[0]);
+
+        BigInteger[] cArray = pC.toArray(new BigInteger[0]);
+
+        BigInteger[] pubArray = pubSignals.toArray(new BigInteger[0]);
+
+        Boolean result = zkVerifier
+                .verifyProof(aArray, bArray, cArray, pubArray)
+                .send();
 
         System.out.println("On-chain verification result: " + result);
 
         return result;
-
     }
 }
