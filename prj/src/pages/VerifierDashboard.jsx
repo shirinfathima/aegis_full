@@ -182,16 +182,17 @@ function VerifierDashboard() {
         let type = "Raw Data View"; // Default if unknown
         let isStructureFound = false;
 
-        // A. ZKP DETECTION (Deep Check)
-        // Checks top-level OR nested inside 'proof'
+        // 👇 CHANGED: ZKP ENROLLMENT DETECTION
         const zkpAttributes = vp.disclosedAttributes || (vp.proof && vp.proof.disclosedAttributes);
         const zkpType = (vp.type === 'ZeroKnowledgeProof') || (vp.proof && vp.proof.type === 'ZeroKnowledgeProof');
         const zkpValue = vp.proofValue || (vp.proof && vp.proof.proofValue);
 
         if (zkpAttributes || (zkpType && zkpValue)) {
             isStructureFound = true;
-            type = "Selective Disclosure (Age Proof)";
-            resultData = zkpAttributes || { "Verified": "Age > 21 (Zero Knowledge)" };
+            type = "Selective Disclosure (Enrollment Proof)";
+            resultData = {
+                "Enrollment Status": zkpAttributes?.is_active_enrollment ? "ACTIVE" : "EXPIRED"
+            };
         }
         
         // B. VC/VP DETECTION
@@ -364,6 +365,21 @@ function VerifierDashboard() {
                                     <DigitalIDCard vcData={verificationResult.rawVP.verifiableCredential[0]} />
                                 </Box>
                             )}
+
+                            {/* 👇 CHANGED: ZKP UI Display component */}
+                            {verificationResult.type === 'Selective Disclosure (Enrollment Proof)' && (
+                               <Box sx={{ mb: 3, p: 3, bgcolor: '#f0fdf4', borderRadius: 2, border: '1px solid #bbf7d0', textAlign: 'center' }}>
+                                 <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                   {verificationResult.type}
+                                 </Typography>
+                                 <Chip 
+                                   label={`Enrollment Status: ${verificationResult.data["Enrollment Status"]}`}
+                                   color={verificationResult.data["Enrollment Status"] === "ACTIVE" ? "success" : "error"}
+                                   size="medium"
+                                   sx={{ mt: 1, fontWeight: 'bold', fontSize: '1.1rem', py: 2.5, px: 2 }}
+                                 />
+                               </Box>
+                            )}
                             
                             {/* 2. Action Buttons */}
                             {activeInboxRequest && (
@@ -469,7 +485,7 @@ function VerifierDashboard() {
                                     <Card variant="outlined">
                                         <CardContent sx={{ textAlign: 'center' }}>
                                             <Avatar sx={{ width: 50, height: 50, mx: 'auto', mb: 1, bgcolor: '#eef2ff' }}>
-                                                {doc.documentType && doc.documentType.includes('ID') ? '' : '雌'}
+                                                {doc.documentType && doc.documentType.includes('ID') ? '🆔' : '📄'}
                                             </Avatar>
                                             <Typography variant="subtitle1">{doc.documentType}</Typography>
                                             <Button 

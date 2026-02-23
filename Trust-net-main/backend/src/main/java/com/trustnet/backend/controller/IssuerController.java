@@ -1,8 +1,10 @@
 package com.trustnet.backend.controller;
 
+import com.trustnet.backend.DTO.StudentVerificationDTO;
 import com.trustnet.backend.entity.Document;
 import com.trustnet.backend.service.IssuerService;
-import com.trustnet.backend.service.CrossCheckService; // Added for Step 5
+import com.trustnet.backend.service.CrossCheckService;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,60 +16,93 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/issuer")
-@CrossOrigin(origins = "http://localhost:3000") // Added for frontend compatibility
+@CrossOrigin(origins = "http://localhost:3000")
 public class IssuerController {
 
     @Autowired
     private IssuerService issuerService;
 
     @Autowired
-    private CrossCheckService crossCheckService; // Added for Step 5
+    private CrossCheckService crossCheckService;
 
-    // --- NEW ENDPOINT FOR STEP 5: MANUAL REGISTRY VERIFICATION ---
+    // =====================================================
+    // 1️⃣ MANUAL REGISTRY VERIFICATION
+    // =====================================================
     @PostMapping("/verify-student")
-    public ResponseEntity<?> verifyStudent(@RequestBody Map<String, String> request) {
-        String admissionNo = request.get("admissionNo");
-        String name = request.get("name");
+    public ResponseEntity<?> verifyStudent(
+            @RequestBody StudentVerificationDTO dto) {
 
-        if (admissionNo == null || name == null) {
-            return ResponseEntity.badRequest().body("Admission Number and Name are required.");
+        if (dto.getAdmissionNo() == null || dto.getName() == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "error",
+                    "message", "Admission Number and Name are required"
+            ));
         }
 
-        boolean isValid = crossCheckService.verifyStudent(admissionNo, name);
+        boolean isValid =
+                crossCheckService.verifyStudent(
+                        dto.getAdmissionNo(),
+                        dto.getName()
+                );
 
         if (isValid) {
             return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "Student Verified in University Registry"
+                    "status", "success",
+                    "message", "Student verified in University Registry"
             ));
         } else {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
-                "status", "error",
-                "message", "Verification Failed: Registry mismatch for " + admissionNo
+                    "status", "error",
+                    "message", "Verification failed: Registry mismatch"
             ));
         }
     }
 
-    // --- EXISTING ENDPOINTS ---
-
-    // Endpoint for the university to get all documents pending verification
+    // =====================================================
+    // 2️⃣ GET PENDING DOCUMENTS
+    // =====================================================
     @GetMapping("/documents/pending")
     @Transactional(readOnly = true)
     public ResponseEntity<List<Document>> getPendingDocuments() {
-        return ResponseEntity.ok(issuerService.getPendingDocuments());
+
+        return ResponseEntity.ok(
+                issuerService.getPendingDocuments()
+        );
     }
 
-    // Endpoint to approve a document
+    // =====================================================
+    // 3️⃣ APPROVE DOCUMENT (ZKP COMMITMENT GENERATED HERE)
+    // =====================================================
     @PostMapping("/documents/{id}/approve")
     @Transactional
-    public ResponseEntity<Document> approveDocument(@PathVariable Long id) {
-        return ResponseEntity.ok(issuerService.approveDocument(id));
+    public ResponseEntity<?> approveDocument(
+            @PathVariable Long id) {
+
+        Document approvedDoc =
+                issuerService.approveDocument(id);
+
+        return ResponseEntity.ok(Map.of(
+                "status", "approved",
+                "documentId", approvedDoc.getId(),
+                "message", "Document approved and ZKP commitment generated"
+        ));
     }
 
-    // Endpoint to reject a document
+    // =====================================================
+    // 4️⃣ REJECT DOCUMENT
+    // =====================================================
     @PostMapping("/documents/{id}/reject")
     @Transactional
-    public ResponseEntity<Document> rejectDocument(@PathVariable Long id) {
-        return ResponseEntity.ok(issuerService.rejectDocument(id));
+    public ResponseEntity<?> rejectDocument(
+            @PathVariable Long id) {
+
+        Document rejectedDoc =
+                issuerService.rejectDocument(id);
+
+        return ResponseEntity.ok(Map.of(
+                "status", "rejected",
+                "documentId", rejectedDoc.getId(),
+                "message", "Document rejected"
+        ));
     }
 }

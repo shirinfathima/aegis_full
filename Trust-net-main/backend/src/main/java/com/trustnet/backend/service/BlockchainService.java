@@ -2,9 +2,11 @@ package com.trustnet.backend.service;
 
 import com.trustnet.backend.blockchain.DocumentAnchor;
 import com.trustnet.backend.blockchain.Groth16Verifier;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
@@ -12,7 +14,6 @@ import org.web3j.tx.RawTransactionManager;
 import org.web3j.tx.ReadonlyTransactionManager;
 import org.web3j.tx.gas.ContractGasProvider;
 import org.web3j.tuples.generated.Tuple2;
-import org.web3j.protocol.core.methods.request.Transaction;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -23,6 +24,12 @@ public class BlockchainService {
 
     private static final String DOCUMENT_CONTRACT_ADDRESS =
             "0xEE6bCE5BA477fCAe5699FE89b6fa8f75A94148eB";
+
+    private static final BigInteger DEFAULT_GAS_LIMIT =
+            new BigInteger("500000");
+
+    private static final BigInteger MIN_GAS_PRICE =
+            new BigInteger("30000000000"); // 30 Gwei minimum
 
     private final Web3j web3j;
     private final Credentials credentials;
@@ -51,47 +58,36 @@ public class BlockchainService {
         RawTransactionManager txManager =
                 new RawTransactionManager(web3j, credentials, chainId);
 
+        // ✅ Correct Web3j 4.14.0 Compatible Gas Provider
         ContractGasProvider dynamicGasProvider = new ContractGasProvider() {
 
-            public BigInteger getGasPrice(String contractFunc) {
-                return getDynamicGasPrice();
-            }
-
+            @Override
             public BigInteger getGasPrice() {
-                return getDynamicGasPrice();
-            }
-
-            public BigInteger getGasLimit(String contractFunc) {
-                return new BigInteger("500000");
-            }
-
-            public BigInteger getGasLimit() {
-                return new BigInteger("500000");
-            }
-
-            public BigInteger getGasLimit(Transaction transaction) {
-                return new BigInteger("500000");
-            }
-
-            private BigInteger getDynamicGasPrice() {
                 try {
                     BigInteger networkGasPrice =
                             web3j.ethGasPrice().send().getGasPrice();
 
-                    BigInteger minGasPrice =
-                            new BigInteger("30000000000");
-
-                    return networkGasPrice.compareTo(minGasPrice) < 0
-                            ? minGasPrice
+                    return networkGasPrice.compareTo(MIN_GAS_PRICE) < 0
+                            ? MIN_GAS_PRICE
                             : networkGasPrice;
 
                 } catch (IOException e) {
-                    return new BigInteger("35000000000");
+                    return new BigInteger("35000000000"); // fallback
                 }
+            }
+
+            @Override
+            public BigInteger getGasLimit() {
+                return DEFAULT_GAS_LIMIT;
+            }
+
+            @Override
+            public BigInteger getGasLimit(org.web3j.protocol.core.methods.request.Transaction transaction) {
+                return DEFAULT_GAS_LIMIT;
             }
         };
 
-        // Anchor contract (needs signing)
+        // 🔗 Load Anchor Contract (State-changing)
         this.deployedContract = DocumentAnchor.load(
                 DOCUMENT_CONTRACT_ADDRESS,
                 web3j,
@@ -99,7 +95,7 @@ public class BlockchainService {
                 dynamicGasProvider
         );
 
-        // 🔐 Verifier contract (READ ONLY — no gas, no signing)
+        // 🔐 Load Verifier Contract (Read-only)
         ReadonlyTransactionManager readOnlyTxManager =
                 new ReadonlyTransactionManager(web3j, credentials.getAddress());
 
@@ -111,12 +107,18 @@ public class BlockchainService {
         );
     }
 
-    // ==========================
-    // DOCUMENT ANCHORING
-    // ==========================
+    // ===================================================
+    // 📌 DOCUMENT ANCHORING
+    // ===================================================
 
-    public TransactionReceipt anchorDocumentCID(Long userId, String cidHash)
-            throws Exception {
+    public TransactionReceipt anchorDocumentCID(
+            Long userId,
+            String cidHash
+    ) throws Exception {
+
+        if (userId == null || cidHash == null) {
+            throw new IllegalArgumentException("Invalid anchor inputs.");
+        }
 
         BigInteger solUserId = BigInteger.valueOf(userId);
         BigInteger numericHash = new BigInteger(cidHash);
@@ -126,7 +128,12 @@ public class BlockchainService {
                 .send();
     }
 
-    public BigInteger getRawAnchoredCID(Long userId) throws Exception {
+    public BigInteger getRawAnchoredCID(Long userId)
+            throws Exception {
+
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null.");
+        }
 
         BigInteger solUserId = BigInteger.valueOf(userId);
 
@@ -136,9 +143,9 @@ public class BlockchainService {
         return result.component1();
     }
 
-    // ==========================
-    // 🔐 ZK VERIFICATION (VIEW CALL)
-    // ==========================
+    // ===================================================
+    // 🔐 GROTH16 ZKP VERIFICATION (On-chain View Call)
+    // ===================================================
 
     public boolean verifyZkProof(
             List<BigInteger> pA,
@@ -147,26 +154,24 @@ public class BlockchainService {
             List<BigInteger> pubSignals
     ) throws Exception {
 
-        System.out.println("Calling verifier contract...");
+        if (pA == null || pB == null || pC == null || pubSignals == null) {
+            throw new IllegalArgumentException("Proof inputs cannot be null.");
+        }
+
+        if (pA.size() != 2 || pB.size() != 2 || pC.size() != 2) {
+            throw new IllegalArgumentException("Invalid Groth16 proof structure.");
+        }
+
+        System.out.println("🔐 Calling Verifier Contract...");
         System.out.println("Verifier Address: " + zkVerifier.getContractAddress());
 
-        // Convert Lists → Arrays
-        BigInteger[] aArray = pA.toArray(new BigInteger[0]);
-
-        BigInteger[][] bArray = new BigInteger[2][2];
-        bArray[0] = pB.get(0).toArray(new BigInteger[0]);
-        bArray[1] = pB.get(1).toArray(new BigInteger[0]);
-
-        BigInteger[] cArray = pC.toArray(new BigInteger[0]);
-
-        BigInteger[] pubArray = pubSignals.toArray(new BigInteger[0]);
-
+        // ✅ Web3j wrapper expects Lists
         Boolean result = zkVerifier
-                .verifyProof(aArray, bArray, cArray, pubArray)
+                .verifyProof(pA, pB, pC, pubSignals)
                 .send();
 
         System.out.println("On-chain verification result: " + result);
 
-        return result;
+        return result != null && result;
     }
 }

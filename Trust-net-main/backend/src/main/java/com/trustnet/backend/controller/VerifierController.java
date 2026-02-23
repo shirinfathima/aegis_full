@@ -2,28 +2,23 @@ package com.trustnet.backend.controller;
 
 import com.trustnet.backend.DTO.AccessRequestDTO;
 import com.trustnet.backend.DTO.DocumentMetadataDTO;
+import com.trustnet.backend.DTO.ZkProofPayloadDTO;
 import com.trustnet.backend.entity.AccessRequest;
 import com.trustnet.backend.entity.Document;
 import com.trustnet.backend.entity.User;
 import com.trustnet.backend.repository.AccessRequestRepository;
 import com.trustnet.backend.repository.DocumentRepository;
 import com.trustnet.backend.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import com.trustnet.backend.service.BlockchainService;
 import com.trustnet.backend.service.UploadService;
-import com.trustnet.backend.service.ZkHashUtils;
-import com.trustnet.backend.service.ZkProofService;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.*;
+import org.springframework.web.bind.annotation.*;
 
 import java.math.BigInteger;
-import java.util.Base64;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -31,31 +26,22 @@ import java.util.stream.Collectors;
 @CrossOrigin(origins = "http://localhost:3000")
 public class VerifierController {
 
-    @Autowired
-    private UserRepository userRepository;
+    @Autowired private UserRepository userRepository;
+    @Autowired private DocumentRepository documentRepository;
+    @Autowired private AccessRequestRepository accessRequestRepository;
+    @Autowired private BlockchainService blockchainService;
+    @Autowired private UploadService uploadService;
 
-    @Autowired
-    private DocumentRepository documentRepository;
-
-    @Autowired
-    private AccessRequestRepository accessRequestRepository;
-
-    @Autowired
-    private ZkProofService zkProofService;
-
-    @Autowired
-    private BlockchainService blockchainService;
-
-    @Autowired
-    private UploadService uploadService;
-
-    // --- 1. SEARCH USER DOCUMENTS ---
+    // =====================================================
+    // 1️⃣ SEARCH USER DOCUMENTS
+    // =====================================================
     @GetMapping("/search-user")
     public ResponseEntity<?> searchUserDocs(@RequestParam String email) {
-        User user = userRepository.findByEmail(email);
 
+        User user = userRepository.findByEmail(email);
         if (user == null) {
-            return ResponseEntity.badRequest().body("User not found with email: " + email);
+            return ResponseEntity.badRequest()
+                    .body("User not found with email: " + email);
         }
 
         List<Document> docs = documentRepository.findByUserId(user.getId());
@@ -78,9 +64,12 @@ public class VerifierController {
         return ResponseEntity.ok(safeList);
     }
 
-    // --- 2. REQUEST ACCESS ---
+    // =====================================================
+    // 2️⃣ REQUEST ACCESS
+    // =====================================================
     @PostMapping("/request-access")
     public ResponseEntity<?> requestAccess(@RequestBody AccessRequestDTO requestDto) {
+
         Optional<Document> docOpt = documentRepository.findById(requestDto.getDocumentId());
         if (docOpt.isEmpty()) {
             return ResponseEntity.badRequest().body("Document not found");
@@ -100,68 +89,165 @@ public class VerifierController {
 
         return ResponseEntity.ok("Access request sent successfully!");
     }
-    
-    // --- 3. VIEW OUTGOING REQUESTS (Verifier Initiated) ---
+
+    // =====================================================
+    // 3️⃣ VIEW MY REQUESTS
+    // =====================================================
     @GetMapping("/my-requests")
     public ResponseEntity<List<AccessRequest>> getMyRequests(@RequestParam String verifierEmail) {
         return ResponseEntity.ok(accessRequestRepository.findByVerifierEmail(verifierEmail));
     }
 
-    // --- INBOX ENDPOINT (User Sent Proofs) ---
+    // =====================================================
+    // 4️⃣ INBOX (APPROVED PROOFS)
+    // =====================================================
     @GetMapping("/inbox")
     public ResponseEntity<List<AccessRequest>> getInbox(@RequestParam String verifierEmail) {
         List<AccessRequest> allRequests = accessRequestRepository.findByVerifierEmail(verifierEmail);
         
-        // Filter for requests that are APPROVED (User sent them) and have Proof Data
         List<AccessRequest> inbox = allRequests.stream()
             .filter(r -> r.getStatus() == AccessRequest.RequestStatus.APPROVED && r.getProofData() != null)
             .collect(Collectors.toList());
             
         return ResponseEntity.ok(inbox);
     }
-    
-    @GetMapping("/dashboard-data")
-    public ResponseEntity<String> getVerifierDashboardData() {
-        return ResponseEntity.ok("Successfully retrieved Verifier Dashboard data");
+
+    // =====================================================
+    // 5️⃣ VERIFY ENROLLMENT ZKP ON-CHAIN
+    // =====================================================
+    @PostMapping("/verify-zkp")
+    public ResponseEntity<?> verifyZkpOnChain(
+            @RequestBody ZkProofPayloadDTO payload) {
+
+        try {
+            if (payload == null ||
+                payload.getProof() == null ||
+                payload.getProof().getDisclosedAttributes() == null ||
+                !Boolean.TRUE.equals(payload.getProof()
+                        .getDisclosedAttributes()
+                        .getIsActiveEnrollment()) ||
+                payload.getProof().getPublicSignals() == null ||
+                payload.getProof().getPublicSignals().isEmpty() ||
+                !"1".equals(payload.getProof()
+                        .getPublicSignals().get(0))) {
+
+                return ResponseEntity.badRequest().body(Map.of(
+                        "verifiedOnChain", false,
+                        "error", "Enrollment check failed at circuit level"
+                ));
+            }
+
+            ZkProofPayloadDTO.ProofValue pv = payload.getProof().getProofValue();
+
+            if (pv == null || pv.getA() == null || pv.getB() == null || pv.getC() == null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "verifiedOnChain", false,
+                        "error", "Invalid proof structure"
+                ));
+            }
+
+            List<BigInteger> pA = List.of(
+                    new BigInteger(pv.getA().get(0)),
+                    new BigInteger(pv.getA().get(1))
+            );
+
+            List<List<BigInteger>> pB = List.of(
+                    List.of(new BigInteger(pv.getB().get(0).get(1)), new BigInteger(pv.getB().get(0).get(0))),
+                    List.of(new BigInteger(pv.getB().get(1).get(1)), new BigInteger(pv.getB().get(1).get(0)))
+            );
+
+            List<BigInteger> pC = List.of(
+                    new BigInteger(pv.getC().get(0)),
+                    new BigInteger(pv.getC().get(1))
+            );
+
+            List<BigInteger> pubSignals = new ArrayList<>();
+            for (String sig : payload.getProof().getPublicSignals()) {
+                pubSignals.add(new BigInteger(sig));
+            }
+
+            boolean verified = blockchainService.verifyZkProof(pA, pB, pC, pubSignals);
+
+            if (verified) {
+                return ResponseEntity.ok(Map.of("verifiedOnChain", true, "message", "Enrollment ZKP verified successfully"));
+            } else {
+                return ResponseEntity.ok(Map.of("verifiedOnChain", false, "error", "Cryptographic proof rejected"));
+            }
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("verifiedOnChain", false, "error", "Blockchain verification failed: " + e.getMessage()));
+        }
     }
 
-    // --- 4. SECURE DOCUMENT RETRIEVAL ---
+    // =====================================================
+    // 6️⃣ DIRECT PROOF SUBMISSION (ONLINE SEND)
+    // =====================================================
+    @PostMapping("/submit-proof")
+    public ResponseEntity<?> submitProofOnline(@RequestBody Map<String, Object> payload) {
+        try {
+            String verifierEmail = (String) payload.get("verifierEmail");
+            String userEmail = (String) payload.get("userEmail");
+            Long documentId = Long.valueOf(payload.get("documentId").toString());
+            String accessType = (String) payload.get("accessType");
+            String vpJson = (String) payload.get("vpJson");
+            String allowedFields = (String) payload.get("allowedFields");
+
+            Document document = documentRepository.findById(documentId)
+                    .orElseThrow(() -> new RuntimeException("Document not found"));
+
+            AccessRequest request = new AccessRequest();
+            request.setVerifierEmail(verifierEmail);
+            request.setUserEmail(userEmail);
+            request.setDocument(document);
+            request.setAccessType(accessType);
+            request.setAllowedFields(allowedFields);
+            request.setStatus(AccessRequest.RequestStatus.APPROVED); 
+            request.setProofData(vpJson);
+            request.setRequestDate(LocalDateTime.now());
+
+            accessRequestRepository.save(request);
+
+            return ResponseEntity.ok(Map.of("status", "success", "message", "Proof submitted successfully to Verifier's Inbox"));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Failed to save proof: " + e.getMessage()));
+        }
+    }
+
+    // =====================================================
+    // 7️⃣ SECURE DOCUMENT RETRIEVAL (REVERTED TO WORKING DECRYPTION LOGIC)
+    // =====================================================
     @GetMapping("/fetch-document-content")
     public ResponseEntity<?> fetchDocumentContent(@RequestParam Long requestId) {
         try {
-            // A. Validate Request
             AccessRequest request = accessRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
 
-            // Check if status allows viewing (APPROVED or VERIFIED if you kept the enum, but logic here is standard)
-            if (request.getStatus() != AccessRequest.RequestStatus.APPROVED && 
-                request.getStatus().toString() != "VERIFIED") { 
-                return ResponseEntity.badRequest().body("Access not approved by user.");
-            }
-
             Document doc = request.getDocument();
-            
-            // B. BLOCKCHAIN INTEGRITY CHECK
-            if (doc.getVcHash() == null) {
-                return ResponseEntity.status(409).body("Integrity Error: Document has not been approved/anchored yet.");
-            }
-            
-            BigInteger calculatedHash = new BigInteger(doc.getVcHash());
-            BigInteger blockchainHash = blockchainService.getRawAnchoredCID(doc.getUserId());
 
-            if (!calculatedHash.equals(blockchainHash)) {
-                return ResponseEntity.status(409).body("BLOCKCHAIN ALERT: Document integrity check failed!");
+            // A. If images are temporarily stored in DB (Pre-Approval or Just Uploaded)
+            if (doc.getIpfsCid() == null || doc.getIpfsCid().isEmpty()) {
+                Map<String, String> response = new HashMap<>();
+                if (doc.getTempDocData() != null) {
+                    response.put("fileData", Base64.getEncoder().encodeToString(doc.getTempDocData()));
+                }
+                if (doc.getTempDocBackData() != null) {
+                    response.put("fileDataBack", Base64.getEncoder().encodeToString(doc.getTempDocBackData()));
+                }
+                response.put("fileName", doc.getDocumentName());
+                return ResponseEntity.ok(response);
             }
 
-            // C. FETCH & EXTRACT FROM ZIP
+            // B. FETCH & EXTRACT FROM ZIP (Working Old Branch Logic)
             byte[] zipBytes = uploadService.downloadFromIpfs(doc.getIpfsCid());
             
-            // 1. EXTRACT FRONT IMAGE (Standard)
+            // 1. EXTRACT FRONT IMAGE
             byte[] frontEncrypted = uploadService.extractEncryptedImage(zipBytes, "front");
             byte[] frontDecrypted = uploadService.decryptDocument(frontEncrypted, doc.getEncryptedDocumentKey());
             String frontBase64 = Base64.getEncoder().encodeToString(frontDecrypted);
 
-            // 2. EXTRACT BACK IMAGE (Optional)
+            // 2. EXTRACT BACK IMAGE
             String backBase64 = null;
             try {
                 byte[] backEncrypted = uploadService.extractEncryptedImage(zipBytes, "back");
@@ -174,8 +260,8 @@ public class VerifierController {
             // E. PREPARE RESPONSE
             Map<String, String> response = new HashMap<>();
             response.put("fileName", doc.getDocumentName());
-            response.put("fileData", frontBase64);      // Key for Front Image
-            response.put("fileDataBack", backBase64);   // Key for Back Image
+            response.put("fileData", frontBase64);      
+            response.put("fileDataBack", backBase64);   
             response.put("blockchainStatus", "VERIFIED");
             
             return ResponseEntity.ok(response);
@@ -183,60 +269,6 @@ public class VerifierController {
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.internalServerError().body("Error fetching document: " + e.getMessage());
-        }
-    }
-    
-    // --- 5. ZKP ENDPOINT ---
-    @PostMapping("/generate-proof/age")
-    public ResponseEntity<?> generateAgeProof(@RequestParam Long documentId) {
-        try {
-            Document doc = documentRepository.findById(documentId)
-                .orElseThrow(() -> new RuntimeException("Document not found"));
-                
-            String proof = zkProofService.generateAgeProof(doc);
-            return ResponseEntity.ok(proof);
-            
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Proof Generation Failed: " + e.getMessage());
-        }
-    }
-
-    // --- 6. SUBMIT PROOF ENDPOINT ---
-    @PostMapping("/submit-proof")
-    public ResponseEntity<?> submitProof(@RequestBody Map<String, Object> payload) {
-        try {
-            String verifierEmail = (String) payload.get("verifierEmail");
-            String userEmail = (String) payload.get("userEmail"); 
-            Long documentId = Long.valueOf(payload.get("documentId").toString());
-            String accessType = (String) payload.get("accessType"); 
-            String proofData = (String) payload.get("vpJson");
-            
-            // Extract allowedFields from payload (For Redacted View)
-            String allowedFields = (String) payload.get("allowedFields");
-
-            if(verifierEmail == null || documentId == null) {
-                return ResponseEntity.badRequest().body("Missing required fields");
-            }
-
-            AccessRequest request = new AccessRequest();
-            request.setVerifierEmail(verifierEmail);
-            request.setUserEmail(userEmail);
-            request.setDocument(documentRepository.findById(documentId).orElseThrow(() -> new RuntimeException("Doc not found")));
-            request.setStatus(AccessRequest.RequestStatus.APPROVED);
-            request.setAccessType(accessType);
-            request.setProofData(proofData);
-            
-            // Set the allowed fields
-            request.setAllowedFields(allowedFields);
-            
-            request.setRequestDate(LocalDateTime.now());
-            request.setExpiryDate(LocalDateTime.now().plusHours(24));
-            
-            accessRequestRepository.save(request);
-            
-            return ResponseEntity.ok("Proof submitted successfully to " + verifierEmail);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error submitting proof: " + e.getMessage());
         }
     }
 }

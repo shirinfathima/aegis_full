@@ -10,9 +10,12 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     // Used by User Dashboard (Show all their docs)
     List<Document> findByUserId(Long userId);
 
-    // ✅ Used by Verifier (Strict Mode: Show ONLY Approved)
+    // Used by Verifier (Strict Mode: Show ONLY Approved)
     List<Document> findByUserIdAndStatus(Long userId, VerificationStatus status);
 
-    // Used by Issuer Dashboard (Show Pending Queue)
+    // 👇 CHANGED: Replaced global status search with Issuer-specific search
+    List<Document> findByIssuerIdAndStatus(Long issuerId, VerificationStatus status);
+
+    // 👇 MUST KEEP THIS: Used by other parts of the system as a global fallback
     List<Document> findByStatus(VerificationStatus status);
 }

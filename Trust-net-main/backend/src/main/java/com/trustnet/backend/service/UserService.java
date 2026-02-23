@@ -10,8 +10,6 @@ import org.springframework.stereotype.Service;
 import java.security.*;
 import java.security.spec.ECGenParameterSpec;
 import java.util.Base64;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.List;
 
 @Service
@@ -35,8 +33,17 @@ public class UserService {
             // 2. Derive DID (simplified: use a hash of the public key for the DID)
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] publicKeyHash = digest.digest(pair.getPublic().getEncoded());
-            // DID format: did:trustnet:<base64(hash(publicKey))>
-            String did = "did:trustnet:" + Base64.getUrlEncoder().withoutPadding().encodeToString(publicKeyHash);
+            
+            // 👇 PERMANENT FIX: Convert byte array to pure Hexadecimal string instead of Base64
+            StringBuilder hexString = new StringBuilder("0x");
+            for (byte b : publicKeyHash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            String did = "did:trustnet:" + hexString.toString();
             
             // 3. Encode the Private Key
             String privateKeyB64 = Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded());
@@ -73,7 +80,6 @@ public class UserService {
         String privateKeyB64 = didData[1];
 
         // 2. Encrypt Private Key for secure storage
-        // FIX: Use the custom/mock encryptDidPrivateKey function instead of passwordEncoder.encode()
         String encryptedPrivateKey = encryptDidPrivateKey(privateKeyB64, plainTextPassword);
 
         // 3. Set DID and Encrypted Key on the User object
@@ -103,6 +109,7 @@ public class UserService {
             return "Invalid password";
         }
     }
+    
     public List<User> getAllIssuers() {
         return userRepo.findByRole(Role.ISSUER);
     }

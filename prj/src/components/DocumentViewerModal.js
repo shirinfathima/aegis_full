@@ -19,8 +19,8 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
 
   const { accessType, allowedFields, document, verifierEmail, proofData } = request;
 
-  // 👇 FIX: Robust check for ZKP_AGE or ZKP
-  const isZKP = accessType === 'ZKP_AGE' || accessType === 'ZKP';
+  // 👇 CHANGED: Updated for new ZKP Module (Removed old ZKP_AGE)
+  const isZKP = accessType === 'ZKP';
   const isRedacted = accessType === 'REDACTED' || isZKP;
   
   const hasBackImage = !!document.fileDataBack; 
@@ -51,7 +51,16 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
   try {
       if (proofData) {
           const vp = JSON.parse(proofData);
-          if (vp.verifiableCredential && vp.verifiableCredential.length > 0) {
+          
+          // 👇 CHANGED: Extract Enrollment Data for new ZKP Module
+          if (isZKP && (vp.proof?.disclosedAttributes || vp.disclosedAttributes)) {
+              const attrs = vp.proof?.disclosedAttributes || vp.disclosedAttributes;
+              flattenedData = {
+                  "Enrollment Status": attrs.is_active_enrollment ? "ACTIVE" : "EXPIRED"
+              };
+              dataSource = "Zero-Knowledge Proof";
+          }
+          else if (vp.verifiableCredential && vp.verifiableCredential.length > 0) {
               const subject = vp.verifiableCredential[0].credentialSubject;
               flattenedData = extractAndFlatten(subject);
               dataSource = "Verifiable Presentation";
@@ -105,7 +114,10 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
       return "Not Shared";
   };
 
-  const displayData = {
+  // 👇 CHANGED: Render Enrollment status dynamically if it is a ZKP request
+  const displayData = isZKP ? {
+      "Enrollment Status": flattenedData["Enrollment Status"] || "VERIFIED"
+  } : {
     Name: isFieldAllowed('Name') ? getValue('Name') : "REDACTED",
     DOB: isFieldAllowed('Date of Birth') ? getValue('DOB') : "REDACTED",
     ID_Number: isFieldAllowed('Reg No') ? getValue('ID_Number') : "REDACTED", 

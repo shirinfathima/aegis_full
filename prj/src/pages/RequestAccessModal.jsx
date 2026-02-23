@@ -29,8 +29,9 @@ const RequestAccessModal = ({ isOpen, onClose, document, verifierEmail, userEmai
     let fieldsToSend = "ALL"; // Default for FULL
     if (accessType === 'REDACTED') {
         fieldsToSend = selectedFields.join(',');
-    } else if (accessType === 'ZKP_AGE') {
-        fieldsToSend = "AGE_CHECK_ONLY"; // Special flag for ZKP
+    // 👇 CHANGED: Updated to flow with the new Enrollment ZKP module
+    } else if (accessType === 'ZKP') {
+        fieldsToSend = "ENROLLMENT_CHECK_ONLY"; // Special flag for ZKP
     }
 
     const payload = {
@@ -115,15 +116,15 @@ const RequestAccessModal = ({ isOpen, onClose, document, verifierEmail, userEmai
               <div className="check-circle"></div>
             </div>
 
-            {/* 👇 NEW Option 3: ZK Age Proof */}
+            {/* 👇 CHANGED: Updated Option 3 to ZK Enrollment Proof */}
             <div 
-              className={`option-card ${accessType === 'ZKP_AGE' ? 'active' : ''}`}
-              onClick={() => setAccessType('ZKP_AGE')}
+              className={`option-card ${accessType === 'ZKP' ? 'active' : ''}`}
+              onClick={() => setAccessType('ZKP')}
             >
-              <div className="card-icon">🔞</div>
+              <div className="card-icon">🎓</div>
               <div className="card-info">
                 <h4>ZK Proof</h4>
-                <p>Verify age, hide data.</p>
+                <p>Verify enrollment status.</p>
               </div>
               <div className="check-circle"></div>
             </div>
