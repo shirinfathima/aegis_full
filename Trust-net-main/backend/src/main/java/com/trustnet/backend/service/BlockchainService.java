@@ -58,7 +58,6 @@ public class BlockchainService {
         RawTransactionManager txManager =
                 new RawTransactionManager(web3j, credentials, chainId);
 
-        // ✅ Correct Web3j 4.14.0 Compatible Gas Provider
         ContractGasProvider dynamicGasProvider = new ContractGasProvider() {
 
             @Override
@@ -163,15 +162,26 @@ public class BlockchainService {
         }
 
         System.out.println("🔐 Calling Verifier Contract...");
-        System.out.println("Verifier Address: " + zkVerifier.getContractAddress());
+        System.out.println("🔐 Verifier Address : " + zkVerifier.getContractAddress());
+        System.out.println("🔐 pA               : " + pA);
+        System.out.println("🔐 pB               : " + pB);
+        System.out.println("🔐 pC               : " + pC);
+        System.out.println("🔐 pubSignals        : " + pubSignals);
 
-        // ✅ Web3j wrapper expects Lists
-        Boolean result = zkVerifier
-                .verifyProof(pA, pB, pC, pubSignals)
-                .send();
+        try {
+            Boolean result = zkVerifier
+                    .verifyProof(pA, pB, pC, pubSignals)
+                    .send();
 
-        System.out.println("On-chain verification result: " + result);
+            System.out.println("✅ On-chain verification result: " + result);
+            return result != null && result;
 
-        return result != null && result;
+        } catch (Exception e) {
+            System.out.println("💥 Verifier contract call FAILED");
+            System.out.println("💥 Exception type   : " + e.getClass().getName());
+            System.out.println("💥 Exception message: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
     }
 }
