@@ -40,7 +40,7 @@ def extract_info(img, image_filename):
     if "front" in image_filename:
         # 1. FIND ID (Registration Number)
         # Matches CS / digits / digits regardless of initial misread symbol
-        id_pattern = r'CS\s*/\s*\d{5}\s*/\s*\d{2}'
+        id_pattern = r'CS\s*/\s*\d{4,5}\s*/\s*\d{2}'#recent change to allow 4 or 5 digits in the middle part
         id_match = re.search(id_pattern, full_text_upper)
         
         if id_match:
