@@ -183,15 +183,18 @@ function IssuedDocuments() {
               throw new Error(errorData || "Failed to generate ZKP");
             }
 
-            const presentation = await response.json();
-            const isActive = presentation?.proof?.disclosedAttributes?.is_active_enrollment === true;
+            const responseData = await response.json();
+
+            // 🔥 CORRECT PATH
+            const isActive =
+              responseData?.presentation?.proof?.disclosedAttributes?.is_active_enrollment === true;
 
             setProofResult({
               status: isActive ? 'Success' : 'Warning',
               message: isActive
                 ? "ZKP Generated: Proven active enrollment on-chain."
                 : "ZKP Warning: Enrollment expired.",
-              presentation: JSON.stringify(presentation, null, 2)
+              presentation: JSON.stringify(responseData.presentation, null, 2)
             });
 
         // --- OPTION 2: REDACTED (Selective Disclosure) ---
