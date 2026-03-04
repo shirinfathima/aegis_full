@@ -177,11 +177,6 @@ function VerifierDashboard() {
 
         if (!vp) throw new Error("Parsed JSON is null or empty.");
 
-        // 🔥 FIX: If proof is wrapped inside { success, presentation }, unwrap it
-        if (vp.presentation) {
-            vp = vp.presentation;
-        }
-        
         // 2. Identify Structure
         let resultData = {};
         let type = "Raw Data View"; // Default if unknown

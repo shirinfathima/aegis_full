@@ -40,27 +40,19 @@ app.post("/generate-commitment", async (req, res) => {
 ========================================= */
 app.post("/generate-proof", async (req, res) => {
     try {
-
         const {
             studentDidNumeric,
             expiryYear,
             universitySecret,
-            universityCommitment,
-            currentYear   // ✅ RECEIVE FROM JAVA
+            universityCommitment
         } = req.body;
 
-        // ✅ Validate ALL inputs
-        if (
-            !studentDidNumeric ||
-            !expiryYear ||
-            !universitySecret ||
-            !universityCommitment ||
-            !currentYear
-        ) {
+        if (!studentDidNumeric || !expiryYear || !universitySecret || !universityCommitment) {
             return res.status(400).send("Missing proof parameters");
         }
 
-        // ✅ Build deterministic circuit input
+        const currentYear = new Date().getFullYear();
+
         const input = {
             current_year: currentYear.toString(),
             university_commitment: universityCommitment.toString(),
@@ -70,7 +62,6 @@ app.post("/generate-proof", async (req, res) => {
         };
 
         console.log("🚀 Generating In-Memory Proof...");
-        console.log("🔎 Circuit Input:", input);
 
         const { proof, publicSignals } = await snarkjs.groth16.fullProve(
             input,

@@ -1,7 +1,3 @@
-/**
- *Submitted for verification at amoy.polygonscan.com on 2026-02-22
-*/
-
 // SPDX-License-Identifier: GPL-3.0
 /*
     Copyright 2021 0KIMS association.

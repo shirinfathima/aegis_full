@@ -164,34 +164,9 @@ const DocumentViewerModal = ({ isOpen, onClose, request }) => {
                     {(!isRedacted || isFieldAllowed('Photo')) ? (
                         <>
                             <img key={viewSide} src={currentImageSrc ? `data:image/png;base64,${currentImageSrc}` : "https://via.placeholder.com/500x350?text=Image+Not+Found"} alt="Doc" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                            <Box 
-                                sx={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    pointerEvents: 'none',
-                                    zIndex: 5,
-                                    display: 'flex',
-                                    flexWrap: 'wrap',
-                                    alignContent: 'center',
-                                    justifyContent: 'center',
-                                    transform: 'rotate(-25deg)',   // 🔥 removed scale
-                                }}
-                                >
-                                {Array.from({ length: 25 }).map((_, i) => (
-                                    <Typography
-                                    key={i}
-                                    sx={{
-                                        fontSize: '19px',          // 🔥 smaller font
-                                        fontWeight: 700,
-                                        color: 'rgba(0, 0, 0, 0.18)',
-                                        mr: 6,
-                                        mb: 6,
-                                        userSelect: 'none',
-                                        whiteSpace: 'nowrap'
-                                    }}
-                                    >
-                                    {verifierEmail} • {new Date().toLocaleDateString()}
-                                    </Typography>
+                            <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5, display: 'flex', flexWrap: 'wrap', opacity: 0.15, transform: 'rotate(-25deg) scale(1.5)' }}>
+                                {Array.from({ length: 20 }).map((_, i) => (
+                                    <Typography key={i} variant="h6" sx={{ color: 'white', fontWeight: 'bold', mr: 8, mb: 8, userSelect: 'none' }}>{verifierEmail} • {new Date().toLocaleDateString()}</Typography>
                                 ))}
                             </Box>
                         </>
