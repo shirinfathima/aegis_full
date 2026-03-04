@@ -28,6 +28,11 @@ public class ZkProofService {
 
     private final String NODE_ZKP_URL = "http://localhost:3001";
 
+    // 🔥 BN254 field prime (VERY IMPORTANT)
+    private static final BigInteger FIELD_PRIME = new BigInteger(
+        "21888242871839275222246405745257275088548364400416034343698204186575808495617"
+    );
+
     @Autowired
     private RestTemplate restTemplate;
 
@@ -37,13 +42,24 @@ public class ZkProofService {
     @Autowired
     private BlockchainService blockchainService;
 
+<<<<<<< HEAD
+=======
+    /**
+     * ✅ FIXED: Convert DID to numeric AND reduce into BN254 field
+     */
+>>>>>>> deee38f712605334968fda998155496fd7cecab1
     public BigInteger convertDidToNumeric(String did) {
         try {
             String address = did.substring(did.lastIndexOf(":") + 1);
             if (!address.startsWith("0x")) {
                 throw new RuntimeException("Invalid DID format: Address part must start with 0x");
             }
-            return new BigInteger(address.substring(2), 16);
+
+            BigInteger raw = new BigInteger(address.substring(2), 16);
+
+            // 🔥 Reduce into field
+            return raw.mod(FIELD_PRIME);
+
         } catch (Exception e) {
             throw new RuntimeException("DID Conversion failed: " + e.getMessage());
         }
@@ -116,12 +132,10 @@ public class ZkProofService {
         if (yearDigits.length() < 4) {
             throw new RuntimeException("Invalid expiry year format.");
         }
+
         int expiryYear = Integer.parseInt(yearDigits.substring(0, 4));
 
         int currentYear = java.time.Year.now().getValue();
-        if (expiryYear < currentYear) {
-            throw new RuntimeException("Enrollment expired. Expiry: " + expiryYear + ", Current: " + currentYear);
-        }
 
         String secret = document.getZkSecret();
         String commitment = document.getZkCommitment();
@@ -130,6 +144,7 @@ public class ZkProofService {
             throw new RuntimeException("Missing ZK issuance data.");
         }
 
+<<<<<<< HEAD
         // ✅ DEBUG: Log all inputs before calling Node.js
         System.out.println("=== ZK PROOF GENERATION DEBUG ===");
         System.out.println("🔎 studentDidNumeric : " + studentDidNumeric.toString());
@@ -137,6 +152,15 @@ public class ZkProofService {
         System.out.println("🔎 currentYear       : " + currentYear);
         System.out.println("🔎 secret (from DB)  : " + secret);
         System.out.println("🔎 commitment (from DB): " + commitment);
+=======
+        // 🔍 DEBUG
+        System.out.println("=== ZK PROOF GENERATION DEBUG ===");
+        System.out.println("studentDidNumeric : " + studentDidNumeric);
+        System.out.println("expiryYear        : " + expiryYear);
+        System.out.println("currentYear       : " + currentYear);
+        System.out.println("secret (from DB)  : " + secret);
+        System.out.println("commitment (from DB): " + commitment);
+>>>>>>> deee38f712605334968fda998155496fd7cecab1
         System.out.println("=================================");
 
         ObjectNode payload = objectMapper.createObjectNode();
@@ -144,6 +168,7 @@ public class ZkProofService {
         payload.put("expiryYear", expiryYear);
         payload.put("universitySecret", secret);
         payload.put("universityCommitment", commitment);
+        payload.put("currentYear", currentYear);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -167,12 +192,14 @@ public class ZkProofService {
             throw new RuntimeException("Invalid response from Node ZKP service.");
         }
 
+<<<<<<< HEAD
         // 6. Delegate On-Chain Verification (pass commitment for debug)
+=======
+>>>>>>> deee38f712605334968fda998155496fd7cecab1
         boolean verifiedOnChain = verifyZkProofOnChain(proofJson, publicJson, commitment);
 
         boolean isActiveStudent = verifiedOnChain && publicJson.get(0).asText().equals("1");
 
-        // 7. Build W3C Verifiable Presentation
         ObjectNode vp = objectMapper.createObjectNode();
         vp.putArray("@context").add("https://www.w3.org/2018/credentials/v1");
         vp.putArray("type").add("VerifiablePresentation").add("StudentVerificationProof");
@@ -200,22 +227,25 @@ public class ZkProofService {
         return objectMapper.writeValueAsString(outer);
     }
 
-    /**
-     * 🔥 CLEAN ARCHITECTURE: Extract proof → Delegate to BlockchainService
-     */
     private boolean verifyZkProofOnChain(
             JsonNode proofJson,
             JsonNode publicSignalsJson,
+<<<<<<< HEAD
             String storedCommitment   // ← ADDED for debug comparison
+=======
+            String storedCommitment
+>>>>>>> deee38f712605334968fda998155496fd7cecab1
     ) throws Exception {
 
-        // G1 - pi_a
         List<BigInteger> pA = Arrays.asList(
                 new BigInteger(proofJson.get("pi_a").get(0).asText()),
                 new BigInteger(proofJson.get("pi_a").get(1).asText())
         );
 
+<<<<<<< HEAD
         // G2 - pi_b: NO inner swap — correct EVM order
+=======
+>>>>>>> deee38f712605334968fda998155496fd7cecab1
         List<List<BigInteger>> pB = Arrays.asList(
                 Arrays.asList(
                         new BigInteger(proofJson.get("pi_b").get(0).get(0).asText()),
@@ -227,18 +257,21 @@ public class ZkProofService {
                 )
         );
 
-        // G1 - pi_c
         List<BigInteger> pC = Arrays.asList(
                 new BigInteger(proofJson.get("pi_c").get(0).asText()),
                 new BigInteger(proofJson.get("pi_c").get(1).asText())
         );
 
+<<<<<<< HEAD
         // Public Signals: dynamically sized
+=======
+>>>>>>> deee38f712605334968fda998155496fd7cecab1
         List<BigInteger> pubSignals = new ArrayList<>();
         for (int i = 0; i < publicSignalsJson.size(); i++) {
             pubSignals.add(new BigInteger(publicSignalsJson.get(i).asText()));
         }
 
+<<<<<<< HEAD
         // ✅ DEBUG: Full diagnostic before blockchain call
         System.out.println("=== ON-CHAIN VERIFICATION DEBUG ===");
         System.out.println("🚨 Signal count : " + pubSignals.size());
@@ -246,8 +279,15 @@ public class ZkProofService {
         System.out.println("🔍 Commitment from DB   : " + storedCommitment);
         System.out.println("🔍 Commitment from proof: " + pubSignals.get(2));
         System.out.println("🔍 Match                : " + storedCommitment.equals(pubSignals.get(2).toString()));
+=======
+        System.out.println("=== ON-CHAIN VERIFICATION DEBUG ===");
+        System.out.println("Signals : " + pubSignals);
+        System.out.println("Commitment match : " +
+                storedCommitment.equals(pubSignals.get(2).toString()));
+>>>>>>> deee38f712605334968fda998155496fd7cecab1
         System.out.println("====================================");
 
         return blockchainService.verifyZkProof(pA, pB, pC, pubSignals);
     }
+    
 }

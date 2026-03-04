@@ -22,14 +22,21 @@ import java.util.List;
 @Service
 public class BlockchainService {
 
+    // ===================================================
+    // 🔗 CONTRACT ADDRESSES (Amoy)
+    // ===================================================
+
     private static final String DOCUMENT_CONTRACT_ADDRESS =
             "0xEE6bCE5BA477fCAe5699FE89b6fa8f75A94148eB";
 
+    private static final String VERIFIER_CONTRACT_ADDRESS =
+            "0x542ecf0fB59184beA71483CCB36517fc7c95323d";
+
     private static final BigInteger DEFAULT_GAS_LIMIT =
-            new BigInteger("500000");
+            new BigInteger("2000000");
 
     private static final BigInteger MIN_GAS_PRICE =
-            new BigInteger("30000000000"); // 30 Gwei minimum
+            new BigInteger("30000000000");
 
     private final Web3j web3j;
     private final Credentials credentials;
@@ -39,11 +46,13 @@ public class BlockchainService {
     public BlockchainService(
             @Autowired Web3j web3j,
             @Value("${amoy.private.key:${AMOY_PRIVATE_KEY:}}") String privateKey,
-            @Value("${blockchain.chain-id:80002}") long chainId,
-            @Value("${blockchain.verifier.contract.address}") String verifierAddress
+            @Value("${blockchain.chain-id:80002}") long chainId
     ) throws Exception {
 
         this.web3j = web3j;
+
+        System.out.println("🔗 Connected chain ID: " +
+                web3j.ethChainId().send().getChainId());
 
         if (privateKey == null || privateKey.isEmpty() || privateKey.length() < 64) {
             throw new Exception("AMOY_PRIVATE_KEY missing or invalid.");
@@ -71,7 +80,7 @@ public class BlockchainService {
                             : networkGasPrice;
 
                 } catch (IOException e) {
-                    return new BigInteger("35000000000"); // fallback
+                    return new BigInteger("35000000000");
                 }
             }
 
@@ -81,12 +90,13 @@ public class BlockchainService {
             }
 
             @Override
-            public BigInteger getGasLimit(org.web3j.protocol.core.methods.request.Transaction transaction) {
+            public BigInteger getGasLimit(
+                    org.web3j.protocol.core.methods.request.Transaction transaction) {
                 return DEFAULT_GAS_LIMIT;
             }
         };
 
-        // 🔗 Load Anchor Contract (State-changing)
+        // Load DocumentAnchor (state-changing)
         this.deployedContract = DocumentAnchor.load(
                 DOCUMENT_CONTRACT_ADDRESS,
                 web3j,
@@ -94,16 +104,20 @@ public class BlockchainService {
                 dynamicGasProvider
         );
 
-        // 🔐 Load Verifier Contract (Read-only)
+        // Load Verifier (read-only)
         ReadonlyTransactionManager readOnlyTxManager =
                 new ReadonlyTransactionManager(web3j, credentials.getAddress());
 
         this.zkVerifier = Groth16Verifier.load(
-                verifierAddress,
+                VERIFIER_CONTRACT_ADDRESS,
                 web3j,
                 readOnlyTxManager,
                 dynamicGasProvider
         );
+
+        System.out.println("✅ BlockchainService initialized");
+        System.out.println("📄 DocumentAnchor: " + DOCUMENT_CONTRACT_ADDRESS);
+        System.out.println("🔐 Groth16Verifier: " + VERIFIER_CONTRACT_ADDRESS);
     }
 
     // ===================================================
@@ -143,7 +157,7 @@ public class BlockchainService {
     }
 
     // ===================================================
-    // 🔐 GROTH16 ZKP VERIFICATION (On-chain View Call)
+    // 🔐 GROTH16 ZKP VERIFICATION (Manual ABI Encoding - FINAL FIX)
     // ===================================================
 
     public boolean verifyZkProof(
@@ -153,14 +167,68 @@ public class BlockchainService {
             List<BigInteger> pubSignals
     ) throws Exception {
 
-        if (pA == null || pB == null || pC == null || pubSignals == null) {
-            throw new IllegalArgumentException("Proof inputs cannot be null.");
+        System.out.println("🚀 Bypassing Web3j Wrapper to avoid 2D array encoding bug...");
+
+        // Function selector for:
+        // verifyProof(uint256[2],uint256[2][2],uint256[2],uint256[3])
+        StringBuilder payload = new StringBuilder("0x11479fea");
+
+        // 1️⃣ Encode pA (2 values)
+        payload.append(org.web3j.abi.TypeEncoder.encode(
+                new org.web3j.abi.datatypes.generated.Uint256(pA.get(0))
+        ));
+        payload.append(org.web3j.abi.TypeEncoder.encode(
+                new org.web3j.abi.datatypes.generated.Uint256(pA.get(1))
+        ));
+
+        // 2️⃣ Encode pB (FLAT — 4 values, NOT nested!)
+        payload.append(org.web3j.abi.TypeEncoder.encode(
+                new org.web3j.abi.datatypes.generated.Uint256(pB.get(0).get(0))
+        ));
+        payload.append(org.web3j.abi.TypeEncoder.encode(
+                new org.web3j.abi.datatypes.generated.Uint256(pB.get(0).get(1))
+        ));
+        payload.append(org.web3j.abi.TypeEncoder.encode(
+                new org.web3j.abi.datatypes.generated.Uint256(pB.get(1).get(0))
+        ));
+        payload.append(org.web3j.abi.TypeEncoder.encode(
+                new org.web3j.abi.datatypes.generated.Uint256(pB.get(1).get(1))
+        ));
+
+        // 3️⃣ Encode pC (2 values)
+        payload.append(org.web3j.abi.TypeEncoder.encode(
+                new org.web3j.abi.datatypes.generated.Uint256(pC.get(0))
+        ));
+        payload.append(org.web3j.abi.TypeEncoder.encode(
+                new org.web3j.abi.datatypes.generated.Uint256(pC.get(1))
+        ));
+
+        // 4️⃣ Encode pubSignals (3 values)
+        for (BigInteger signal : pubSignals) {
+            payload.append(org.web3j.abi.TypeEncoder.encode(
+                    new org.web3j.abi.datatypes.generated.Uint256(signal)
+            ));
         }
 
-        if (pA.size() != 2 || pB.size() != 2 || pC.size() != 2) {
-            throw new IllegalArgumentException("Invalid Groth16 proof structure.");
+        // 5️⃣ Create raw eth_call
+        org.web3j.protocol.core.methods.request.Transaction transaction =
+                org.web3j.protocol.core.methods.request.Transaction.createEthCallTransaction(
+                        credentials.getAddress(),
+                        VERIFIER_CONTRACT_ADDRESS,
+                        payload.toString()
+                );
+
+        org.web3j.protocol.core.methods.response.EthCall response =
+                web3j.ethCall(transaction,
+                        org.web3j.protocol.core.DefaultBlockParameterName.LATEST)
+                        .send();
+
+        // 6️⃣ Handle revert
+        if (response.hasError()) {
+            throw new RuntimeException("EVM Revert: " + response.getError().getMessage());
         }
 
+<<<<<<< HEAD
         System.out.println("🔐 Calling Verifier Contract...");
         System.out.println("🔐 Verifier Address : " + zkVerifier.getContractAddress());
         System.out.println("🔐 pA               : " + pA);
@@ -183,5 +251,12 @@ public class BlockchainService {
             e.printStackTrace();
             throw e;
         }
+=======
+        String result = response.getValue();
+        System.out.println("✅ Raw EVM response: " + result);
+
+        // Boolean true = ...0001
+        return result != null && result.endsWith("1");
+>>>>>>> deee38f712605334968fda998155496fd7cecab1
     }
 }

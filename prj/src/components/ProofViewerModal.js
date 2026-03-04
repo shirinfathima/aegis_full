@@ -16,6 +16,11 @@ const ProofViewerModal = ({ isOpen, onClose, proofData }) => {
     proof = { error: "Invalid Proof Format" };
   }
 
+  // 🔥 FIX: unwrap presentation wrapper
+  if (proof.presentation) {
+      proof = proof.presentation;
+  }
+
   // 👇 CHANGED: Extract data based on the new Enrollment ZKP JSON structure
   const disclosedAttributes = proof?.proof?.disclosedAttributes || proof?.disclosedAttributes || {};
   const cryptoProof = proof?.proof?.proofValue || proof?.proofValue || proof?.proof || {};
