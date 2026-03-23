@@ -2,12 +2,16 @@ package com.trustnet.backend.controller;
 
 import com.trustnet.backend.DTO.StudentVerificationDTO;
 import com.trustnet.backend.entity.Document;
+import com.trustnet.backend.entity.User;
+import com.trustnet.backend.model.VerificationStatus;
+import com.trustnet.backend.repository.DocumentRepository;
 import com.trustnet.backend.service.IssuerService;
 import com.trustnet.backend.service.CrossCheckService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,6 +28,9 @@ public class IssuerController {
 
     @Autowired
     private CrossCheckService crossCheckService;
+
+    @Autowired
+    private DocumentRepository documentRepository;
 
     // =====================================================
     // 1️⃣ MANUAL REGISTRY VERIFICATION
@@ -105,4 +112,25 @@ public class IssuerController {
                 "message", "Document rejected"
         ));
     }
+
+    // =====================================================
+    // 5️⃣ GET ISSUER STATS
+    // =====================================================
+    @GetMapping("/stats")
+    public ResponseEntity<?> getIssuerStats(Authentication authentication) {
+        User currentUser = (User) authentication.getPrincipal();
+
+        long totalIssued = documentRepository.countByIssuerIdAndStatus(
+                currentUser.getId(), VerificationStatus.APPROVED
+        );
+
+        long fraudDetected = documentRepository.countByIssuerIdAndStatus(
+            currentUser.getId(), VerificationStatus.REJECTED
+        );
+
+        return ResponseEntity.ok(Map.of(
+                "totalIssued", totalIssued,
+                "fraudDetected", fraudDetected
+        ));
+    } 
 }

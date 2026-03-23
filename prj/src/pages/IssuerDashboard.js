@@ -29,6 +29,11 @@ function IssuerDashboard() {
   const [currentUser] = useState(getCurrentUser());
   const [currentTab, setCurrentTab] = useState(1);
   const [pendingDocs, setPendingDocs] = useState([]);
+  const [stats, setStats] = useState({
+    totalIssued: 0,
+    fraudDetected: 0,
+    avgProcessingTime: '45s'
+  });
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   
@@ -37,27 +42,43 @@ function IssuerDashboard() {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [registryCheck, setRegistryCheck] = useState({ loading: false, verified: null, message: '' });
 
-  const [stats, setStats] = useState({
-    totalIssued: 1240, 
-    fraudDetected: 12, 
-    avgProcessingTime: '45s'
-  });
-
   const fetchPendingDocuments = useCallback(async () => {
     try {
       const data = await documentService.getPendingDocuments();
-      setPendingDocs(data);
+      const sorted = data.sort((a, b) => b.id - a.id);
+      setPendingDocs(sorted);
     } catch (err) {
       console.error("Error fetching pending docs:", err);
       setError("Failed to load pending documents.");
     }
   }, []);
+  
+  const fetchStats = useCallback(async () => {
+    const password = getStoredPassword();
+    const email = currentUser?.email;
+    try {
+      const response = await fetch(`http://localhost:8080/api/issuer/stats`, {
+        headers: { 'Authorization': 'Basic ' + btoa(`${email}:${password}`) }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStats(prev => ({
+          ...prev,
+          totalIssued: data.totalIssued,
+          fraudDetected: data.fraudDetected,
+        }));
+      }
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     if (currentUser?.role.toUpperCase() === 'ISSUER') {
       fetchPendingDocuments();
+      fetchStats(); 
     }
-  }, [currentUser, fetchPendingDocuments]);
+  }, [currentUser, fetchPendingDocuments, fetchStats]);
 
   // --- REGISTRY CROSS-CHECK LOGIC ---
   const performRegistryCheck = async (doc) => {
@@ -170,15 +191,6 @@ function IssuerDashboard() {
           <ListItem button selected={currentTab === 1} onClick={() => setCurrentTab(1)}>
             <ListItemIcon><AssignmentIconWithBadge count={pendingDocs.length} /></ListItemIcon>
             <ListItemText primary="Verification Queue" />
-          </ListItem>
-          <Divider />
-          <ListItem button onClick={() => navigate('/issuer/issued-docs')}>
-            <ListItemIcon><DocIcon /></ListItemIcon>
-            <ListItemText primary="Issued Documents" />
-          </ListItem>
-          <ListItem button onClick={() => navigate('/issuer/fraud-detection')}>
-            <ListItemIcon><FraudIcon color="warning" /></ListItemIcon>
-            <ListItemText primary="Fraud Detection" />
           </ListItem>
           <Divider sx={{ my: 1 }} />
           <ListItem button onClick={() => { logout(); navigate('/'); }}>

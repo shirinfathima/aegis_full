@@ -18,4 +18,14 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
     // 👇 MUST KEEP THIS: Used by other parts of the system as a global fallback
     List<Document> findByStatus(VerificationStatus status);
+
+    // =====================================================
+    // STATS QUERIES
+    // =====================================================
+    // Count total approved documents for a specific issuer
+    long countByIssuerIdAndStatus(Long issuerId, VerificationStatus status);
+
+    // Count documents with low face match confidence (fraud alerts)
+    long countByFaceMatchConfidenceLessThan(double threshold);
+
 }
