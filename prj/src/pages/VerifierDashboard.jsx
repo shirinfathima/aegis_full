@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ethers } from 'ethers';
 import {
   Box, Typography, Card, CardContent, Button, Grid, Table, 
   TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, 
@@ -141,7 +142,7 @@ function VerifierDashboard() {
       setActiveInboxRequest(request); 
       setProofInput(request.proofData);
       setCurrentTab(0); // Switch to Verify Tool
-      setTimeout(() => handleVerify(request.proofData), 100);
+      setTimeout(async () => await handleVerify(request.proofData), 100);
   };
 
   const handleResetVerification = () => {
@@ -151,7 +152,7 @@ function VerifierDashboard() {
   };
 
   // --- 👇 UPDATED: Highly Permissive Verification Logic ---
-  const handleVerify = (inputJson = proofInput) => {
+  const handleVerify = async (inputJson = proofInput) => {
     setVerificationResult(null);
     try {
         if(!inputJson) throw new Error("Input cannot be empty.");
@@ -200,24 +201,52 @@ function VerifierDashboard() {
             };
         }
         
-        // B. VC/VP DETECTION
+        // B. TRUE CRYPTOGRAPHIC VC/VP VERIFICATION
         else if (vp.verifiableCredential && Array.isArray(vp.verifiableCredential)) {
-             isStructureFound = true;
-             const credential = vp.verifiableCredential[0];
-             
-             // Check VP types
-             const types = Array.isArray(vp.type) ? vp.type : [vp.type || ""];
-             if (types.includes("RedactedDisclosure")) {
-                 type = "Redacted Document";
-             } else {
-                 type = "Full Identity Document";
-             }
-             
-             if (credential && credential.credentialSubject) {
-                 resultData = credential.credentialSubject.claims || credential.credentialSubject;
-             } else {
-                 resultData = { "Info": "Credential present but subject data is missing." };
-             }
+            isStructureFound = true;
+            const credential = vp.verifiableCredential[0];
+
+            // Determine type
+            const types = Array.isArray(vp.type) ? vp.type : [vp.type || ""];
+            if (types.includes("RedactedDisclosure")) {
+                type = "Redacted Document";
+            } else {
+                type = "Full Identity Document";
+            }
+
+            // --- REAL CRYPTOGRAPHIC CHECK ---
+            try {
+                if (!credential.proof || !credential.proof.proofValue) {
+                    throw new Error("No cryptographic proof found in credential.");
+                }
+
+                // 1. Extract issuer Ethereum address from DID
+                const issuerAddress = credential.issuer.split(':').pop();
+
+                // 2. Extract signature
+                const signature = credential.proof.proofValue;
+
+                // 3. Reconstruct original signed data (remove proof block)
+                const dataToVerify = { ...credential };
+                delete dataToVerify.proof;
+                const messageString = JSON.stringify(dataToVerify);
+
+                // 4. Recover the address that signed this message
+                const recoveredAddress = ethers.utils.verifyMessage(messageString, signature);
+
+                // 5. Compare — if mismatch, document was tampered
+                if (recoveredAddress.toLowerCase() !== issuerAddress.toLowerCase()) {
+                    throw new Error("Signature mismatch! This document was altered or forged.");
+                }
+
+                // 6. Signature valid — extract claims
+                if (credential.credentialSubject) {
+                    resultData = credential.credentialSubject.claims || credential.credentialSubject;
+                }
+
+            } catch (validationError) {
+                throw new Error("Cryptographic Validation Failed: " + validationError.message);
+            }
         }
         
         // C. FALLBACK: If we can't identify it, SHOW IT ANYWAY.
@@ -342,7 +371,7 @@ function VerifierDashboard() {
                       }}
                       sx={{fontFamily: 'monospace', bgcolor: '#f8f9fa'}}
                     />
-                    <Button variant="contained" size="large" sx={{ mt: 2 }} onClick={() => handleVerify()} startIcon={<VerifierIcon />}>
+                    <Button variant="contained" size="large" sx={{ mt: 2 }} onClick={async () => await handleVerify()} startIcon={<VerifierIcon />}>
                         Verify Signature & Data
                     </Button>
                   </Grid>
