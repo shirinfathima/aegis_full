@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import IncomingRequests from './IncomingRequests'; // <--- NEW IMPORT
+import IncomingRequests from './IncomingRequests';
 import {
   Box,
   Typography,
@@ -30,6 +30,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import { getCurrentUser, logout, getStoredPassword } from '../services/authService';
+
+const cardGradient = 'linear-gradient(135deg, #1a3f4a 0%, #2d5a63 50%, #3d7a8f 100%)';
 
 function UserDashboard() {
   const navigate = useNavigate();
@@ -119,29 +121,30 @@ function UserDashboard() {
   
   const userSidebar = (
     <Box>
-      <Card sx={{ mb: 3 }}>
-        <CardContent sx={{ textAlign: 'center' }}>
-          <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'primary.main' }}>
-            <PersonIcon sx={{ fontSize: 40 }} />
+      <Card sx={{ mb: 3, borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+        <CardContent sx={{ textAlign: 'center', background: 'linear-gradient(180deg, #f8fbff 0%, #f0f7ff 100%)' }}>
+          <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, background: cardGradient, boxShadow: '0 8px 24px rgba(67, 139, 152, 0.3)' }}>
+            <PersonIcon sx={{ fontSize: 40, color: '#fff' }} />
           </Avatar>
-          <Typography variant="h6">{user.name}</Typography>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>{user.name}</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             {user.email}
           </Typography>
-          <Chip label={user.role} color="primary" size="small" />
+          <Chip label={user.role} sx={{ background: cardGradient, color: '#fff', fontWeight: 700 }} size="small" />
           <Box sx={{ mt: 3 }}>
             <Button
               variant="outlined"
               startIcon={<EditIcon />}
               onClick={() => navigate('/profile-details')}
               fullWidth
+              sx={{ borderRadius: 2, fontWeight: 600, borderColor: '#438b98', color: '#438b98' }}
             >
               Profile Details
             </Button>
           </Box>
         </CardContent>
       </Card>
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 3, borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
         <CardContent sx={{ textAlign: 'center' }}>
             <List sx={{ width: '100%' }}>
                 <ListItem 
@@ -150,65 +153,57 @@ function UserDashboard() {
                         logout(); 
                         navigate('/'); 
                     }}
+                    sx={{ borderRadius: 2, '&:hover': { background: 'rgba(244, 67, 54, 0.08)' } }}
                 >
                     <ListItemIcon>
                         <LogoutIcon color="error" />
                     </ListItemIcon>
-                    <ListItemText primary="Logout" />
+                    <ListItemText primary="Logout" sx={{ fontWeight: 600 }} />
                 </ListItem>
             </List>
         </CardContent>
       </Card>
-      <Card>
+      <Card sx={{ borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Quick Actions</Typography>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>Quick Actions</Typography>
           <List>
-            <ListItem button onClick={() => navigate('/upload')}>
+            <ListItem button onClick={() => navigate('/upload')} sx={{ borderRadius: 2, '&:hover': { background: 'rgba(67, 139, 152, 0.08)' } }}>
               <ListItemIcon>
-                <UploadIcon color="primary" />
+                <UploadIcon sx={{ color: '#438b98' }} />
               </ListItemIcon>
-              <ListItemText primary="Upload Document" />
+              <ListItemText primary="Upload Document" sx={{ fontWeight: 600 }} />
             </ListItem>
-            <Divider />
-            <ListItem button onClick={() => navigate('/issued-documents')}>
+            <Divider sx={{ my: 1 }} />
+            <ListItem button onClick={() => navigate('/issued-documents')} sx={{ borderRadius: 2, '&:hover': { background: 'rgba(67, 139, 152, 0.08)' } }}>
               <ListItemIcon>
-                <DocumentIcon color="primary" />
+                <DocumentIcon sx={{ color: '#438b98' }} />
               </ListItemIcon>
-              <ListItemText primary="Issued Documents" />
+              <ListItemText primary="Issued Documents" sx={{ fontWeight: 600 }} />
             </ListItem>          
           </List>
         </CardContent>
       </Card>
-    </Box>
-  );
-
-  return (
-    <DashboardLayout sidebar={userSidebar}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <PersonIcon /> Welcome back, {user.name}
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Manage your documents and track verification status
-        </Typography>
-      </Box>
-
-      {/* --- NEW INBOX COMPONENT ADDED HERE --- */}
-      <IncomingRequests userEmail={user.email} />
-      {/* -------------------------------------- */}
-
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Verification Progress</Typography>
+      <Card sx={{ borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+        <Box sx={{ background: cardGradient, p: 3 }}>
+          <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700 }}>Verification Progress</Typography>
+        </Box>
+        <CardContent sx={{ p: 3, background: '#f8fbfd' }}>
           <Box sx={{ mb: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="body2">Overall Progress</Typography>
-              <Typography variant="body2">{Math.round(getOverallProgress())}%</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Overall Progress</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: '#438b98' }}>{Math.round(getOverallProgress())}%</Typography>
             </Box>
             <LinearProgress 
               variant="determinate" 
               value={getOverallProgress()} 
-              sx={{ height: 8, borderRadius: 4 }}
+              sx={{ 
+                height: 8, 
+                borderRadius: 4,
+                background: 'rgba(67, 139, 152, 0.2)',
+                '& .MuiLinearProgress-bar': {
+                  background: cardGradient
+                }
+              }}
             />
           </Box>
           <Typography variant="body2" color="text.secondary">
@@ -216,81 +211,123 @@ function UserDashboard() {
           </Typography>
         </CardContent>
       </Card>
-      <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 3 }}>Document Status</Typography>
+    </Box>
+  );
+
+  return (
+    <DashboardLayout sidebar={userSidebar}>
+      <Box sx={{ mb: 4, p: 3, borderRadius: 3, background: 'linear-gradient(135deg, #f5fafc 0%, #e8f4f8 100%)', boxShadow: '0 12px 35px rgba(16, 39, 70, 0.15)', position: 'relative', overflow: 'hidden' }}>
+        <Box sx={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(67, 139, 152, 0.1) 0%, transparent 70%)', animation: 'float 6s ease-in-out infinite' }} />
+        <Box sx={{ position: 'relative', zIndex: 1 }}>
+          <Typography variant="h4" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1, fontWeight: 600 }}>
+            <PersonIcon /> Welcome back, {user.name}
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ fontWeight: 500 }}>
+            Manage your documents and track verification status
+          </Typography>
+        </Box>
+        <style>{`
+          @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+          }
+        `}</style>
+      </Box>
+
+      <IncomingRequests userEmail={user.email} />
+
+      <Card sx={{ mb: 3, borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+        <Box sx={{ background: cardGradient, p: 3 }}>
+          <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700 }}>Document Status</Typography>
+        </Box>
+        <CardContent sx={{ p: 4, background: '#f8fbfd' }}>
           
           {isLoading ? (
-            <LinearProgress />
+            <LinearProgress sx={{ borderRadius: 2 }} />
           ) : error ? (
-            <Alert severity="error">{error}</Alert>
+            <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>
           ) : documents.length === 0 ? (
-            <Alert severity="info">
+            <Alert severity="info" sx={{ borderRadius: 2 }}>
               No documents uploaded yet. Start by uploading your first document.
             </Alert>
           ) : (
-            <Grid container spacing={2}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
               {documents.map((document) => (
-                <Grid item xs={12} key={document.id}>
-                  <Card variant="outlined">
-                    <CardContent>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Card key={document.id} variant="outlined" sx={{ borderRadius: 2, border: '1px solid #e0e0e0', transition: 'all 0.2s', background: '#fff', '&:hover': { boxShadow: '0 8px 24px rgba(67, 139, 152, 0.15)', borderColor: '#438b98' } }}>
+                  <CardContent sx={{ p: 3.75 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, flex: 1, minWidth: 0 }}>
+                        <Box sx={{ color: getStatusColor(document.status) === 'success' ? '#4caf50' : getStatusColor(document.status) === 'warning' ? '#ff9800' : '#f44336', flexShrink: 0 }}>
                           {getStatusIcon(document.status)}
-                          <Box>
-                            <Typography variant="subtitle1">{document.documentName}</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              Uploaded recently
-                            </Typography>
-                            {document.faceMatchConfidence != null && (
-                              <Typography variant="body2" color="text.secondary">
-                                Confidence: {document.faceMatchConfidence}%
-                              </Typography>
-                            )}
-                          </Box>
                         </Box>
-                        <Box sx={{ textAlign: 'right' }}>
-                          <Chip
-                            label={document.status}
-                            color={getStatusColor(document.status)}
-                            size="small"
-                            sx={{ mb: 1 }}
-                          />
-                          <Box>
-                            {document.status === 'REJECTED' && (
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => navigate('/upload')}
-                              >
-                                Re-upload
-                              </Button>
-                            )}
-                            {document.status === 'APPROVED' && (
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => navigate('/issued-documents')}
-                              >
-                                View Credential
-                              </Button>
-                            )}
-                          </Box>
+                        <Box sx={{ minWidth: 0, flex: 1 }}>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 700, wordBreak: 'break-word' }}>{document.documentName}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Uploaded recently
+                          </Typography>
+                          {document.faceMatchConfidence != null && (
+                            <Typography variant="body2" color="text.secondary">
+                              Confidence: {document.faceMatchConfidence}%
+                            </Typography>
+                          )}
                         </Box>
                       </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
+                      <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                        <Chip
+                          label={document.status}
+                          color={getStatusColor(document.status)}
+                          size="small"
+                          sx={{ mb: 1.25, fontWeight: 700, display: 'block' }}
+                        />
+                        <Box sx={{ mt: 1.25 }}>
+                          {document.status === 'REJECTED' && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => navigate('/upload')}
+                              sx={{ borderRadius: 1, fontWeight: 600, padding: '7.5px 20px', fontSize: '0.75rem' }}
+                            >
+                              Re-upload
+                            </Button>
+                          )}
+                          {document.status === 'APPROVED' && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => navigate('/issued-documents')}
+                              sx={{ borderRadius: 1, fontWeight: 600, borderColor: '#438b98', color: '#438b98', padding: '7.5px 20px', fontSize: '0.75rem' }}
+                            >
+                              View Credential
+                            </Button>
+                          )}
+                        </Box>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
               ))}
-            </Grid>
+            </Box>
           )}
 
-          <Box sx={{ mt: 3, textAlign: 'center' }}>
+          <Box sx={{ mt: 3.75, textAlign: 'center' }}>
             <Button
               variant="contained"
               startIcon={<UploadIcon />}
               onClick={() => navigate('/upload')}
               size="large"
+              sx={{
+                background: cardGradient,
+                color: '#fff',
+                px: 5,
+                py: 1.5,
+                fontWeight: 700,
+                borderRadius: 2,
+                boxShadow: '0 8px 24px rgba(67, 139, 152, 0.3)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #2d5a63 0%, #4a8fa3 45%, #5aa8b8 100%)',
+                  boxShadow: '0 12px 32px rgba(67, 139, 152, 0.4)'
+                }
+              }}
             >
               Upload New Document
             </Button>

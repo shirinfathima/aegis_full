@@ -17,7 +17,7 @@
 .modal-container {
   background: white;
   width: 90%;
-  max-width: 600px; /* Slightly wider to fit 3 cards comfortably */
+  max-width: 600px;
   border-radius: 24px;
   padding: 24px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
@@ -34,13 +34,24 @@
 }
 
 .icon-badge {
-  background: #EEF2FF;
+  background: linear-gradient(135deg, #e8f4f7 0%, #d4eaef 100%);
   font-size: 24px;
   padding: 12px;
   border-radius: 50%;
+  color: #438b98;
 }
 
-.modal-header h3 { margin: 0; color: #1E293B; font-size: 20px; }
+.modal-header h3 { 
+  margin: 0; 
+  color: #2d5a63;
+  font-size: 20px;
+  font-weight: 700;
+  background: none;
+  -webkit-background-clip: initial;
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+}
+
 .subtitle { color: #64748B; font-size: 14px; }
 
 .close-btn {
@@ -52,10 +63,9 @@
   cursor: pointer;
 }
 
-/* 👇 UPDATED GRID FOR 3 ITEMS */
 .selection-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr); /* 3 Columns */
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -63,7 +73,7 @@
 .option-card {
   border: 2px solid #E2E8F0;
   border-radius: 16px;
-  padding: 12px; /* Slightly reduced padding */
+  padding: 12px;
   cursor: pointer;
   transition: all 0.3s ease;
   position: relative;
@@ -74,11 +84,16 @@
   min-height: 110px;
 }
 
-.option-card:hover { transform: translateY(-4px); border-color: #cbd5e1; }
+.option-card:hover { 
+  transform: translateY(-4px); 
+  border-color: #438b98;
+  box-shadow: 0 4px 12px rgba(67, 139, 152, 0.15);
+}
 
 .option-card.active {
-  border-color: #6366F1;
-  background: #EEF2FF;
+  border-color: #438b98;
+  background: linear-gradient(135deg, #e8f4f7 0%, #d4eaef 100%);
+  box-shadow: 0 8px 16px rgba(67, 139, 152, 0.2);
 }
 
 .check-circle {
@@ -87,11 +102,12 @@
   width: 18px; height: 18px;
   border: 2px solid #CBD5E1;
   border-radius: 50%;
+  background: white;
 }
 
 .option-card.active .check-circle {
-  background: #6366F1;
-  border-color: #6366F1;
+  background: #438b98;
+  border-color: #438b98;
 }
 
 .card-icon {
@@ -103,6 +119,7 @@
   font-size: 14px;
   margin: 0 0 4px 0;
   color: #1e293b;
+  font-weight: 600;
 }
 
 .card-info p {
@@ -125,7 +142,11 @@
   margin-bottom: 20px;
 }
 
-.chip-container { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-container { 
+  display: flex; 
+  flex-wrap: wrap; 
+  gap: 8px; 
+}
 
 .chip {
   background: white;
@@ -134,13 +155,21 @@
   border-radius: 20px;
   font-size: 13px;
   cursor: pointer;
-  color: #475569;
+  color: #64748B;
+  transition: all 0.2s;
+}
+
+.chip:hover {
+  border-color: #438b98;
+  color: #438b98;
+  background: #f0f7fa;
 }
 
 .chip.selected {
-  background: #10B981;
+  background: linear-gradient(135deg, #2d5a63 0%, #438b98 100%);
   color: white;
-  border-color: #10B981;
+  border-color: #438b98;
+  font-weight: 600;
 }
 
 .modal-footer {
@@ -153,22 +182,38 @@
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+  background: linear-gradient(135deg, #1a3f4a 0%, #2d5a63 50%, #3d7a8f 100%);
   color: white;
   border: none;
   padding: 12px 24px;
   border-radius: 12px;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 4px 12px rgba(67, 139, 152, 0.3);
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #2d5a63 0%, #3d7a8f 50%, #438b98 100%);
+  box-shadow: 0 8px 20px rgba(67, 139, 152, 0.4);
+  transform: translateY(-2px);
 }
 
 .btn-ghost {
   background: none;
-  border: none;
+  border: 1px solid #E2E8F0;
   color: #64748B;
   font-weight: 600;
   cursor: pointer;
   padding: 10px 20px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.btn-ghost:hover {
+  border-color: #438b98;
+  color: #438b98;
+  background: linear-gradient(135deg, #e8f4f7 0%, #d4eaef 100%);
 }
 
 .status-banner {
@@ -182,7 +227,6 @@
 .status-banner.success { background: #D1FAE5; color: #065F46; }
 .status-banner.error { background: #FEE2E2; color: #991B1B; }
 
-/* 👇 MOBILE RESPONSIVENESS */
 @media (max-width: 600px) {
   .selection-grid {
     grid-template-columns: 1fr; /* Stack cards vertically on phones */

@@ -1,27 +1,34 @@
 // SignInModal.js - REPLACE ENTIRE FILE
 import React, { useState } from 'react';
-import {
-  Modal, Box, Typography, TextField, Button, Link, Alert
-} from '@mui/material';
+import { Modal, Box, Typography, TextField, Button, Link, Alert } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { login } from './services/authService';
 import { useNavigate } from 'react-router-dom';
 
+const cardGradient = 'linear-gradient(135deg, #1a3f4a 0%, #2d5a63 50%, #3d7a8f 100%)';
+const accentColor = '#438b98';
+
 const StyledModalContent = styled(Box)(({ theme }) => ({
   position: 'absolute',
-  top: '50%',
-  left: '50%',
+  top: '50%', left: '50%',
   transform: 'translate(-50%, -50%)',
-  width: 400,
+  width: 420,
   backgroundColor: theme.palette.background.paper,
   boxShadow: theme.shadows[24],
   padding: theme.spacing(4),
-  borderRadius: theme.shape.borderRadius * 2,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: theme.spacing(2),
-  outline: 'none',
+  borderRadius: 20,
+  display: 'flex', flexDirection: 'column', gap: theme.spacing(2),
+  outline: 'none'
 }));
+
+const fieldSx = {
+  '& .MuiOutlinedInput-root': {
+    '&.Mui-focused fieldset': {
+      borderColor: accentColor,
+      boxShadow: '0 0 0 3px rgba(67, 139, 152, 0.2)'
+    }
+  }
+};
 
 function SignInModal({ open, onClose, onSignUpClick }) {
   const [email, setEmail] = useState('');
@@ -38,46 +45,39 @@ function SignInModal({ open, onClose, onSignUpClick }) {
     try {
       const user = await login(email, password);
       setSubmissionMessage(`Login successful as ${user.role}`);
-      
-      if (user) {
-        onClose();
-        // Use the role from the returned user object
-        const role = user.role.toLowerCase(); 
-        
-        switch(role) {
-          case 'issuer':
-            navigate('/issuer/dashboard');
-            break;
-          case 'verifier':
-            navigate('/verifier/dashboard');
-            break;
-          case 'user':
-          default:
-            navigate('/user');
-        }
-      }
-    } catch (error) {
+      onClose();
+      const role = user.role.toLowerCase();
+      if (role === 'issuer') navigate('/issuer/dashboard');
+      else if (role === 'verifier') navigate('/verifier/dashboard');
+      else navigate('/user');
+    } catch {
       setSubmissionMessage('Login failed. Invalid credentials.');
     }
   };
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      aria-labelledby="sign-in-modal-title"
-      aria-describedby="sign-in-modal-description"
-    >
+    <Modal open={open} onClose={onClose} aria-labelledby="sign-in-modal-title">
       <StyledModalContent>
-        <Typography id="sign-in-modal-title" variant="h5" fontWeight="bold" textAlign="center">
+        <Typography
+          id="sign-in-modal-title"
+          variant="h5"
+          textAlign="center"
+          sx={{
+            background: cardGradient,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            fontWeight: 700,
+          }}
+        >
           Welcome Back
         </Typography>
-        <Typography id="sign-in-modal-description" variant="body2" color="text.secondary" textAlign="center" sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary" textAlign="center">
           Sign in to access your digital identity dashboard
         </Typography>
 
         {submissionMessage && (
-          <Alert severity={submissionMessage.includes("successful") ? "success" : "error"}>
+          <Alert severity={submissionMessage.includes('successful') ? 'success' : 'error'}>
             {submissionMessage}
           </Alert>
         )}
@@ -90,6 +90,7 @@ function SignInModal({ open, onClose, onSignUpClick }) {
           autoFocus
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          sx={fieldSx}
         />
         <TextField
           label="Password"
@@ -99,9 +100,10 @@ function SignInModal({ open, onClose, onSignUpClick }) {
           margin="normal"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          sx={fieldSx}
         />
 
-        <Button variant="contained" fullWidth sx={{ mt: 2, py: 1.5 }} onClick={handleLogin}>
+        <Button variant="contained" fullWidth sx={{ mt: 2, py: 1.5, background: cardGradient }} onClick={handleLogin}>
           Sign In
         </Button>
 
@@ -109,7 +111,7 @@ function SignInModal({ open, onClose, onSignUpClick }) {
           component="button"
           variant="body2"
           onClick={handleSignUpRedirect}
-          sx={{ mt: 1, textAlign: 'center', textDecoration: 'underline' }}
+          sx={{ mt: 1, textAlign: 'center', color: accentColor, textDecoration: 'underline' }}
         >
           Don't have an account? Sign up
         </Link>

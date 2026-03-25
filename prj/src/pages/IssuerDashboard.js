@@ -24,6 +24,9 @@ import { getCurrentUser, logout, getStoredPassword } from '../services/authServi
 import documentService from '../services/documentService'; // Use the service we updated
 import { useNavigate } from 'react-router-dom';
 
+const cardGradient = 'linear-gradient(135deg, #1a3f4a 0%, #2d5a63 50%, #3d7a8f 100%)';
+const accentColor = '#438b98';
+
 function IssuerDashboard() {
   const navigate = useNavigate();
   const [currentUser] = useState(getCurrentUser());
@@ -173,13 +176,13 @@ function IssuerDashboard() {
 
   const issuerSidebar = (
     <Box>
-      <Card sx={{ mb: 3, boxShadow: 3 }}>
-        <CardContent sx={{ textAlign: 'center' }}>
-          <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'primary.main', boxShadow: 2 }}>
-            <IssuerIcon sx={{ fontSize: 40 }} />
+      <Card sx={{ mb: 3, borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+        <CardContent sx={{ textAlign: 'center', background: 'linear-gradient(180deg,#f8fbff 0%,#f0f7ff 100%)' }}>
+          <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, background: cardGradient, boxShadow: '0 8px 24px rgba(67,139,152,0.3)' }}>
+            <IssuerIcon sx={{ fontSize: 40, color: '#fff' }} />
           </Avatar>
-          <Typography variant="h6" fontWeight="bold">{currentUser?.name}</Typography>
-          <Chip label="ISSUER AUTHORITY" color="primary" size="small" sx={{ mt: 1 }} />
+          <Typography variant="h6" fontWeight={700}>{currentUser?.name}</Typography>
+          <Chip label="ISSUER AUTHORITY" sx={{ mt: 1, background: cardGradient, color: '#fff', fontWeight: 700 }} size="small" />
         </CardContent>
       </Card>
       <Paper elevation={2}>
@@ -204,25 +207,40 @@ function IssuerDashboard() {
 
   return (
     <DashboardLayout sidebar={issuerSidebar}>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box>
-          <Typography variant="h4" fontWeight="bold" gutterBottom>Issuer Dashboard</Typography>
-          <Typography color="text.secondary">Manage identity verifications and credential issuance</Typography>
-        </Box>
-        <Chip icon={<PendingIcon />} label={`${pendingDocs.length} Pending Actions`} color="warning" variant="outlined" />
+      <Box sx={{ mb: 4 }}>
+        <Typography
+          variant="h4"
+          sx={{
+            background: cardGradient,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            fontWeight: 700
+          }}
+        >
+          Issuer Dashboard
+        </Typography>
       </Box>
 
       {successMsg && <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccessMsg('')}>{successMsg}</Alert>}
       {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>{error}</Alert>}
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs value={currentTab} onChange={(e, v) => setCurrentTab(v)} textColor="primary" indicatorColor="primary">
-          <Tab label="System Overview" />
-          <Tab label={`Verification Queue (${pendingDocs.length})`} />
-        </Tabs>
-      </Box>
+      <Card sx={{ borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden', mb: 3 }}>
+        <Box sx={{ background: '#f8fbfd', borderBottom: '1px solid #dde8ed' }}>
+          <Tabs
+            value={currentTab}
+            onChange={(e, v) => setCurrentTab(v)}
+            sx={{
+              '& .MuiTab-root': { fontWeight: 700 },
+              '& .MuiTabs-indicator': { background: cardGradient, height: 3 }
+            }}
+          >
+            <Tab label="System Overview" />
+            <Tab label={`Verification Queue (${pendingDocs.length})`} />
+          </Tabs>
+        </Box>
+      </Card>
 
-      {/* Overview Tab Content */}
       {currentTab === 0 && (
         <Grid container spacing={3}>
           <Grid item xs={12} md={4}>
@@ -237,9 +255,8 @@ function IssuerDashboard() {
         </Grid>
       )}
 
-      {/* Verification Queue Table */}
       {currentTab === 1 && (
-        <Card sx={{ boxShadow: 3 }}>
+        <Card sx={{ borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
           <CardContent sx={{ p: 0 }}>
             {pendingDocs.length === 0 ? (
               <Box sx={{ py: 8, textAlign: 'center' }}>
@@ -249,12 +266,12 @@ function IssuerDashboard() {
             ) : (
               <TableContainer>
                 <Table>
-                  <TableHead sx={{ bgcolor: 'grey.100' }}>
+                  <TableHead sx={{ background: cardGradient }}>
                     <TableRow>
-                      <TableCell><strong>ID</strong></TableCell>
-                      <TableCell><strong>Document Name</strong></TableCell>
-                      <TableCell><strong>AI Score</strong></TableCell>
-                      <TableCell align="center"><strong>Review</strong></TableCell>
+                      <TableCell sx={{ color: '#fff', fontWeight: 700 }}>ID</TableCell>
+                      <TableCell sx={{ color: '#fff', fontWeight: 700 }}>Document Name</TableCell>
+                      <TableCell sx={{ color: '#fff', fontWeight: 700 }}>AI Score</TableCell>
+                      <TableCell align="center" sx={{ color: '#fff', fontWeight: 700 }}>Review</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -263,14 +280,32 @@ function IssuerDashboard() {
                         <TableCell>#{doc.id}</TableCell>
                         <TableCell>{doc.documentName}</TableCell>
                         <TableCell>
-                          <Chip 
-                            label={`${doc.faceMatchConfidence}% AI Match`} 
-                            size="small" 
-                            color={doc.faceMatchConfidence > 80 ? "success" : "warning"} 
+                          <Chip
+                            label={`${doc.faceMatchConfidence}% AI Match`}
+                            size="small"
+                            sx={{
+                              background: `linear-gradient(135deg, ${doc.faceMatchConfidence > 80 ? '#16a34a' : '#f97316'} 0%, ${doc.faceMatchConfidence > 80 ? '#22c55e' : '#fb923c'} 100%)`,
+                              color: '#fff',
+                              fontWeight: 700,
+                              borderRadius: 1,
+                            }}
                           />
                         </TableCell>
                         <TableCell align="center">
-                          <Button variant="contained" size="small" startIcon={<ViewIcon />} onClick={() => handleOpenReview(doc)}>
+                          <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={<ViewIcon />}
+                            onClick={() => handleOpenReview(doc)}
+                            sx={{
+                              background: cardGradient,
+                              color: '#fff',
+                              textTransform: 'none',
+                              '&:hover': {
+                                background: 'linear-gradient(135deg, #2d5a63 0%, #438b98 100%)',
+                              },
+                            }}
+                          >
                             Review Evidence
                           </Button>
                         </TableCell>
@@ -286,10 +321,10 @@ function IssuerDashboard() {
 
       {/* --- PRODUCTION REVIEW MODAL WITH REGISTRY CHECK --- */}
       <Dialog open={openModal} onClose={handleCloseReview} maxWidth="lg" fullWidth>
-        <DialogTitle sx={{ bgcolor: '#f5f5f5', borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          Document Review: #{selectedDoc?.id}
-          
-          {/* Registry Status Badge */}
+        <DialogTitle sx={{ bgcolor: '#f5f5f5', borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between' }}>
+          <Typography sx={{ fontWeight: 700, color: accentColor }}>
+            Document Review: #{selectedDoc?.id}
+          </Typography>
           {!registryCheck.loading && registryCheck.verified !== null && (
             <Chip 
               icon={registryCheck.verified ? <VerifiedIcon /> : <FraudIcon />}

@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import {
-  Modal, Box, Typography, TextField, Button, Divider, Link,
+  Modal, Box, Typography, TextField, Button, Link,
   FormControl, InputLabel, Select, MenuItem, Alert
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { register } from './services/authService';
 import { useNavigate } from 'react-router-dom';
+
+const cardGradient = 'linear-gradient(135deg, #1a3f4a 0%, #2d5a63 50%, #3d7a8f 100%)';
+const accentColor = '#438b98';
 
 const StyledModalContent = styled(Box)(({ theme }) => ({
   position: 'absolute',
@@ -31,23 +34,18 @@ function SignUpModal({ open, onClose, onSignInClick }) {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'USER', // <--- Ensure default role is uppercase
+    role: 'USER',
   });
   const [submissionMessage, setSubmissionMessage] = useState('');
   const navigate = useNavigate();
 
-  // FIX 1: Add definition for handleSignInRedirect
   const handleSignInRedirect = () => {
     onClose();
     onSignInClick();
   };
 
-  // FIX 2: Add definition for handleInputChange
   const handleInputChange = (field) => (event) => {
-    setFormData({
-      ...formData,
-      [field]: event.target.value
-    });
+    setFormData({ ...formData, [field]: event.target.value });
   };
 
   const handleSubmit = async () => {
@@ -57,125 +55,66 @@ function SignUpModal({ open, onClose, onSignInClick }) {
     }
 
     try {
-      // The register function now returns the user object on success
       const user = await register(formData.fullName, formData.email, formData.password, formData.role);
-      
       if (user && user.id) {
         setSubmissionMessage('User registered successfully');
-        onClose(); // Close the modal
-
-        // Redirect to the correct dashboard based on the user's role
+        onClose();
         const role = user.role.toLowerCase();
-        switch(role) {
-          case 'issuer':
-            navigate('/issuer/dashboard');
-            break;
-          case 'verifier':
-            navigate('/verifier/dashboard');
-            break;
-          case 'user':
-          default:
-            navigate('/user');
-        }
+        if (role === 'issuer') navigate('/issuer/dashboard');
+        else if (role === 'verifier') navigate('/verifier/dashboard');
+        else navigate('/user');
       }
     } catch (error) {
-      // The authService throws an error on failure, which we catch here
       setSubmissionMessage(error.message || 'Registration failed. Please try again.');
     }
   };
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      aria-labelledby="sign-up-modal-title"
-      aria-describedby="sign-up-modal-description"
-    >
+    <Modal open={open} onClose={onClose} aria-labelledby="sign-up-modal-title">
       <StyledModalContent>
-        <Typography id="sign-up-modal-title" variant="h5" fontWeight="bold" textAlign="center">
+        <Typography
+          id="sign-up-modal-title"
+          variant="h5"
+          textAlign="center"
+          sx={{
+            background: cardGradient,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            fontWeight: 700,
+          }}
+        >
           Create Account
         </Typography>
-        <Typography id="sign-up-modal-description" variant="body2" color="text.secondary" textAlign="center" sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary" textAlign="center">
           Join TrustNet to start verifying your identity
         </Typography>
 
         {submissionMessage && (
-          <Alert severity={submissionMessage === 'User registered successfully' ? "success" : "error"}>
+          <Alert severity={submissionMessage === 'User registered successfully' ? 'success' : 'error'}>
             {submissionMessage}
           </Alert>
         )}
 
-        <TextField
-            fullWidth
-            label="Full Name"
-            margin="normal"
-            variant="outlined"
-            value={formData.fullName}
-            onChange={handleInputChange('fullName')}
-            required
-          />
-
-        <TextField
-          label="Email"
-          type="email"
-          variant="outlined"
-          fullWidth
-          margin="normal"
-          value={formData.email}
-          onChange={handleInputChange('email')}
-          required
-        />
-
-        <TextField
-          label="Password"
-          type="password"
-          variant="outlined"
-          fullWidth
-          margin="normal"
-          value={formData.password}
-          onChange={handleInputChange('password')}
-          required
-        />
-
-        <TextField
-          label="Confirm Password"
-          type="password"
-          variant="outlined"
-          fullWidth
-          margin="normal"
-          value={formData.confirmPassword}
-          onChange={handleInputChange('confirmPassword')}
-          required
-        />
-
+        <TextField fullWidth label="Full Name" margin="normal" variant="outlined" value={formData.fullName} onChange={handleInputChange('fullName')} required />
+        <TextField fullWidth label="Email" type="email" margin="normal" variant="outlined" value={formData.email} onChange={handleInputChange('email')} required />
+        <TextField fullWidth label="Password" type="password" margin="normal" variant="outlined" value={formData.password} onChange={handleInputChange('password')} required />
+        <TextField fullWidth label="Confirm Password" type="password" margin="normal" variant="outlined" value={formData.confirmPassword} onChange={handleInputChange('confirmPassword')} required />
+        
         <FormControl fullWidth margin="normal">
           <InputLabel>Role</InputLabel>
-          <Select
-            value={formData.role}
-            onChange={handleInputChange('role')}
-            label="Role"
-          >
+          <Select value={formData.role} onChange={handleInputChange('role')} label="Role">
             <MenuItem value="USER">User</MenuItem>
             <MenuItem value="VERIFIER">Verifier</MenuItem>
             <MenuItem value="ISSUER">Issuer</MenuItem>
           </Select>
         </FormControl>
 
-        <Button
-          variant="contained"
-          fullWidth
-          sx={{ mt: 3, py: 1.5 }}
-          onClick={handleSubmit}
-        >
+        <Button variant="contained" fullWidth sx={{ mt: 3, py: 1.5, background: cardGradient }} onClick={handleSubmit}>
           Sign Up
         </Button>
 
-        <Link
-          component="button"
-          variant="body2"
-          onClick={handleSignInRedirect}
-          sx={{ mt: 1, textAlign: 'center', textDecoration: 'underline' }}
-        >
+        <Link component="button" variant="body2" onClick={handleSignInRedirect} sx={{ mt: 1, textAlign: 'center', color: accentColor, textDecoration: 'underline' }}>
           Already have an account? Sign in
         </Link>
       </StyledModalContent>

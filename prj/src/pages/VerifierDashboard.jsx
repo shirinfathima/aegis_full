@@ -27,6 +27,9 @@ import ProofViewerModal from '../components/ProofViewerModal';
 import DocumentViewerModal from '../components/DocumentViewerModal'; 
 import DigitalIDCard from '../components/DigitalIDCard'; 
 
+const cardGradient = 'linear-gradient(135deg, #1a3f4a 0%, #2d5a63 50%, #3d7a8f 100%)';
+const accentColor = '#438b98';
+
 function VerifierDashboard() {
   const navigate = useNavigate();
   const [currentUser] = useState(getCurrentUser());
@@ -317,20 +320,28 @@ function VerifierDashboard() {
 
   const verifierSidebar = (
     <Box>
-      <Card sx={{ mb: 3 }}>
-        <CardContent sx={{ textAlign: 'center' }}>
-          <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'secondary.main' }}>
-            <VerifierIcon sx={{ fontSize: 40 }} />
+      <Card sx={{ mb: 3, borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+        <Box sx={{ background: cardGradient, p: 3 }}>
+          <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, background: cardGradient, boxShadow: '0 8px 24px rgba(67, 139, 152, 0.3)' }}>
+            <VerifierIcon sx={{ fontSize: 40, color: '#fff' }} />
           </Avatar>
-          <Typography variant="h6">{currentUser?.name}</Typography>
-          <Chip label="VERIFIER" color="secondary" size="small" sx={{mt:1}}/>
+        </Box>
+        <CardContent sx={{ textAlign: 'center', background: 'linear-gradient(180deg, #f8fbff 0%, #f0f7ff 100%)' }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>{currentUser?.name}</Typography>
+          <Chip label="VERIFIER" sx={{ background: cardGradient, color: '#fff', fontWeight: 700, mt: 1 }} size="small"/>
         </CardContent>
       </Card>
-      <Card>
+      <Card sx={{ borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
         <List>
-          <ListItem button onClick={() => { logout(); navigate('/'); }}>
-            <ListItemIcon><LogoutIcon color="error" /></ListItemIcon>
-            <ListItemText primary="Logout" />
+          <ListItem 
+            button 
+            onClick={() => { logout(); navigate('/'); }}
+            sx={{ borderRadius: 2, '&:hover': { background: 'rgba(244, 67, 54, 0.08)' } }}
+          >
+            <ListItemIcon>
+              <LogoutIcon color="error" />
+            </ListItemIcon>
+            <ListItemText primary="Logout" sx={{ fontWeight: 600 }} />
           </ListItem>
         </List>
       </Card>
@@ -340,27 +351,35 @@ function VerifierDashboard() {
   return (
     <DashboardLayout sidebar={verifierSidebar}>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4">Verifier Portal</Typography>
+        <Typography variant="h4" sx={{ background: cardGradient, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontWeight: 700 }}>
+          Verifier Portal
+        </Typography>
         <Typography color="text.secondary">Validate digital credentials securely</Typography>
       </Box>
 
-      <Card>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={currentTab} onChange={(e, v) => setCurrentTab(v)}>
+      <Card sx={{ borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', background: '#f8fbfd' }}>
+          <Tabs 
+            value={currentTab} 
+            onChange={(e, v) => setCurrentTab(v)}
+            sx={{
+              '& .MuiTab-root': { fontWeight: 600 },
+              '& .MuiTabs-indicator': { background: cardGradient, height: 3 }
+            }}
+          >
             <Tab label="Verify Proof (Tool)" icon={<VerifyIcon />} iconPosition="start"/>
             <Tab label={`Inbox (${inbox.length})`} icon={<InboxIcon />} iconPosition="start"/>
             <Tab label="Find & Request" icon={<SearchIcon />} iconPosition="start"/>
           </Tabs>
         </Box>
 
-        {/* --- Tab 0: Verification Tool --- */}
         {currentTab === 0 && (
-          <CardContent>
+          <CardContent sx={{ p: 4, background: '#f8fbfd' }}>
              <Grid container spacing={3}>
               
               {!verificationResult && (
                   <Grid item xs={12}>
-                    <Typography variant="h6" gutterBottom>Verifiable Presentation Data</Typography>
+                    <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>Verifiable Presentation Data</Typography>
                     <TextField
                       fullWidth multiline rows={4}
                       placeholder='Paste JSON Proof here...'
@@ -369,9 +388,21 @@ function VerifierDashboard() {
                           setProofInput(e.target.value);
                           setActiveInboxRequest(null); 
                       }}
-                      sx={{fontFamily: 'monospace', bgcolor: '#f8f9fa'}}
+                      sx={{
+                        fontFamily: 'monospace', 
+                        bgcolor: '#fff',
+                        '& .MuiOutlinedInput-root.Mui-focused fieldset': {
+                          borderColor: accentColor,
+                        }
+                      }}
                     />
-                    <Button variant="contained" size="large" sx={{ mt: 2 }} onClick={async () => await handleVerify()} startIcon={<VerifierIcon />}>
+                    <Button 
+                      variant="contained" 
+                      size="large" 
+                      sx={{ mt: 3, background: cardGradient, py: 1.5, fontWeight: 700 }} 
+                      onClick={async () => await handleVerify()} 
+                      startIcon={<VerifyIcon />}
+                    >
                         Verify Signature & Data
                     </Button>
                   </Grid>
@@ -381,11 +412,11 @@ function VerifierDashboard() {
                   <Grid item xs={12}>
                       <Divider sx={{my:2}} />
                       {verificationResult.status === 'Valid' ? (
-                          <Alert icon={<ValidIcon fontSize="inherit" />} severity="success" sx={{mb:2}}>
+                          <Alert icon={<ValidIcon fontSize="inherit" />} severity="success" sx={{mb:2, borderRadius: 2}}>
                               <Typography variant="h6">Signature Valid: Credential Verified</Typography>
                           </Alert>
                       ) : (
-                          <Alert icon={<InvalidIcon fontSize="inherit" />} severity="error" sx={{mb:2}}>
+                          <Alert icon={<InvalidIcon fontSize="inherit" />} severity="error" sx={{mb:2, borderRadius: 2}}>
                              <Typography variant="h6">Verification Failed</Typography>
                              {verificationResult.message}
                           </Alert>
@@ -393,16 +424,14 @@ function VerifierDashboard() {
                       
                       {verificationResult.status === 'Valid' && (
                         <Box>
-                            {/* 1. Digital ID Card (Only for Full ID) */}
                             {verificationResult.type === 'Full Identity Document' && verificationResult.rawVP.verifiableCredential && (
                                 <Box sx={{ mb: 3, display:'flex', justifyContent:'center' }}>
                                     <DigitalIDCard vcData={verificationResult.rawVP.verifiableCredential[0]} />
                                 </Box>
                             )}
 
-                            {/* 👇 CHANGED: ZKP UI Display component */}
                             {verificationResult.type === 'Selective Disclosure (Enrollment Proof)' && (
-                               <Box sx={{ mb: 3, p: 3, bgcolor: '#f0fdf4', borderRadius: 2, border: '1px solid #bbf7d0', textAlign: 'center' }}>
+                               <Box sx={{ mb: 3, p: 3, bgcolor: '#e8f4f7', borderRadius: 2, border: `2px solid ${accentColor}`, textAlign: 'center' }}>
                                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
                                    {verificationResult.type}
                                  </Typography>
@@ -415,24 +444,29 @@ function VerifierDashboard() {
                                </Box>
                             )}
                             
-                            {/* 2. Action Buttons */}
                             {activeInboxRequest && (
-                                <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center', justifyContent: 'center' }}>
+                                <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
                                     
                                     {(verificationResult.type === 'Full Identity Document' || verificationResult.type === 'Redacted Document') ? (
                                         <Button 
-                                            variant="contained" color="primary" startIcon={<VisibilityIcon />}
+                                            variant="contained" 
+                                            color="primary" 
+                                            startIcon={<VisibilityIcon />}
                                             onClick={() => handleViewDocument(activeInboxRequest)}
+                                            sx={{ background: cardGradient, fontWeight: 700 }}
                                         >
                                             View Original Images
                                         </Button>
                                     ) : (
                                         <Button 
-                                            variant="contained" color="success" startIcon={<LockIcon />}
+                                            variant="contained" 
+                                            color="success" 
+                                            startIcon={<LockIcon />}
                                             onClick={() => {
                                                 setViewProofData(activeInboxRequest.proofData);
                                                 setIsProofModalOpen(true);
                                             }}
+                                            sx={{ fontWeight: 700 }}
                                         >
                                             View Proof Details
                                         </Button>
@@ -447,6 +481,7 @@ function VerifierDashboard() {
                             variant="outlined" 
                             startIcon={<ArrowBackIcon />}
                             onClick={handleResetVerification}
+                            sx={{ borderColor: accentColor, color: accentColor, fontWeight: 700 }}
                           >
                               Verify Another Document
                           </Button>
@@ -457,27 +492,33 @@ function VerifierDashboard() {
           </CardContent>
         )}
         
-        {/* --- Tab 1: Inbox (Unchanged) --- */}
         {currentTab === 1 && (
-            <CardContent>
-                <Box sx={{display:'flex', justifyContent:'space-between', mb:2}}>
-                    <Typography variant="h6">Incoming Verification Requests</Typography>
-                    <IconButton onClick={fetchInbox}><RefreshIcon /></IconButton>
+            <CardContent sx={{ p: 4, background: '#f8fbfd' }}>
+                <Box sx={{display:'flex', justifyContent:'space-between', mb:3, alignItems: 'center'}}>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Incoming Verification Requests</Typography>
+                    <IconButton onClick={fetchInbox} sx={{ color: accentColor }}><RefreshIcon /></IconButton>
                 </Box>
-                {inbox.length === 0 ? <Alert severity="info">No pending online requests.</Alert> : (
-                    <TableContainer component={Paper}>
+                {inbox.length === 0 ? <Alert severity="info" sx={{ borderRadius: 2 }}>No pending online requests.</Alert> : (
+                    <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
                         <Table>
-                            <TableHead><TableRow><TableCell>From User</TableCell><TableCell>Document Type</TableCell><TableCell>Access Type</TableCell><TableCell>Action</TableCell></TableRow></TableHead>
+                            <TableHead sx={{ background: cardGradient }}>
+                              <TableRow>
+                                <TableCell sx={{ color: '#fff', fontWeight: 700 }}>From User</TableCell>
+                                <TableCell sx={{ color: '#fff', fontWeight: 700 }}>Document Type</TableCell>
+                                <TableCell sx={{ color: '#fff', fontWeight: 700 }}>Access Type</TableCell>
+                                <TableCell sx={{ color: '#fff', fontWeight: 700 }}>Action</TableCell>
+                              </TableRow>
+                            </TableHead>
                             <TableBody>
                                 {inbox.map((req) => (
-                                    <TableRow key={req.id}>
-                                        <TableCell>{req.userEmail}</TableCell>
+                                    <TableRow key={req.id} sx={{ '&:hover': { background: '#e8f4f7' } }}>
+                                        <TableCell sx={{ fontWeight: 600 }}>{req.userEmail}</TableCell>
                                         <TableCell>{req.document?.documentName}</TableCell>
                                         <TableCell>
-                                            <Chip size="small" label={req.accessType || 'UNKNOWN'} color="primary" variant="outlined" />
+                                            <Chip size="small" label={req.accessType || 'UNKNOWN'} sx={{ background: accentColor, color: '#fff', fontWeight: 600 }} />
                                         </TableCell>
                                         <TableCell>
-                                            <Button variant="contained" size="small" onClick={() => handleReviewRequest(req)}>Verify Proof</Button>
+                                            <Button variant="contained" size="small" onClick={() => handleReviewRequest(req)} sx={{ background: cardGradient }}>Verify Proof</Button>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -488,11 +529,10 @@ function VerifierDashboard() {
             </CardContent>
         )}
 
-        {/* --- Tab 2: SEARCH (Unchanged) --- */}
         {currentTab === 2 && (
-            <CardContent>
-                <Box sx={{ maxWidth: 600, mx: 'auto', textAlign: 'center', mb: 6 }}>
-                    <Typography variant="h6" gutterBottom>Find a User</Typography>
+            <CardContent sx={{ p: 4, background: '#f8fbfd' }}>
+                <Box sx={{ maxWidth: 600, mx: 'auto', mb: 6 }}>
+                    <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, textAlign: 'center' }}>Find a User</Typography>
                     <form onSubmit={handleSearchUser} style={{ display: 'flex', gap: 10 }}>
                         <TextField 
                             fullWidth 
@@ -502,28 +542,35 @@ function VerifierDashboard() {
                             InputProps={{
                                 startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>,
                             }}
+                            sx={{
+                              '& .MuiOutlinedInput-root.Mui-focused fieldset': {
+                                borderColor: accentColor,
+                              }
+                            }}
                         />
-                        <Button type="submit" variant="contained" disabled={isSearching}>
+                        <Button type="submit" variant="contained" disabled={isSearching} sx={{ background: cardGradient, fontWeight: 700, px: 4 }}>
                             {isSearching ? '...' : 'Search'}
                         </Button>
                     </form>
-                    {searchError && <Alert severity="warning" sx={{mt:2}}>{searchError}</Alert>}
+                    {searchError && <Alert severity="warning" sx={{mt:2, borderRadius: 2}}>{searchError}</Alert>}
                 </Box>
 
                 {searchResults.length > 0 && (
                     <Box sx={{ mb: 6 }}>
-                        <Typography variant="h6" sx={{ mb: 2 }}>Search Results</Typography>
+                        <Typography variant="h6" sx={{ mb: 3, fontWeight: 700 }}>Search Results</Typography>
                         <Grid container spacing={3}>
                             {searchResults.map((doc) => (
                                 <Grid item xs={12} sm={6} md={4} key={doc.id}>
-                                    <Card variant="outlined">
+                                    <Card sx={{ borderRadius: 2, transition: 'all 0.3s', '&:hover': { boxShadow: '0 8px 24px rgba(67, 139, 152, 0.15)', transform: 'translateY(-4px)' } }}>
                                         <CardContent sx={{ textAlign: 'center' }}>
-                                            <Avatar sx={{ width: 50, height: 50, mx: 'auto', mb: 1, bgcolor: '#eef2ff' }}>
+                                            <Avatar sx={{ width: 50, height: 50, mx: 'auto', mb: 2, background: cardGradient, boxShadow: '0 4px 12px rgba(67, 139, 152, 0.2)' }}>
                                                 {doc.documentType && doc.documentType.includes('ID') ? '🆔' : '📄'}
                                             </Avatar>
-                                            <Typography variant="subtitle1">{doc.documentType}</Typography>
+                                            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{doc.documentType}</Typography>
                                             <Button 
-                                                variant="outlined" size="small" sx={{ mt: 2 }}
+                                                variant="outlined" 
+                                                size="small" 
+                                                sx={{ mt: 2, borderColor: accentColor, color: accentColor, fontWeight: 600 }}
                                                 startIcon={<LockIcon />}
                                                 onClick={() => openRequestModal(doc)}
                                             >
@@ -538,44 +585,45 @@ function VerifierDashboard() {
                     </Box>
                 )}
 
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                     My Access Requests <RefreshIcon onClick={fetchSentRequests} sx={{ cursor: 'pointer', fontSize: 20, color: 'gray' }}/>
+                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 700 }}>
+                     My Access Requests <RefreshIcon onClick={fetchSentRequests} sx={{ cursor: 'pointer', fontSize: 20, color: accentColor }}/>
                 </Typography>
                 
                 {sentRequests.length === 0 ? (
-                    <Alert severity="info">You haven't sent any requests yet.</Alert>
+                    <Alert severity="info" sx={{ borderRadius: 2 }}>You haven't sent any requests yet.</Alert>
                 ) : (
-                    <TableContainer component={Paper} variant="outlined">
+                    <TableContainer component={Paper} sx={{ borderRadius: 2 }} variant="outlined">
                         <Table>
-                            <TableHead>
-                                <TableRow sx={{ bgcolor: '#f9fafb' }}>
-                                    <TableCell>User</TableCell>
-                                    <TableCell>Document</TableCell>
-                                    <TableCell>Type</TableCell>
-                                    <TableCell>Status</TableCell>
-                                    <TableCell>Data</TableCell>
+                            <TableHead sx={{ background: cardGradient }}>
+                                <TableRow>
+                                    <TableCell sx={{ color: '#fff', fontWeight: 700 }}>User</TableCell>
+                                    <TableCell sx={{ color: '#fff', fontWeight: 700 }}>Document</TableCell>
+                                    <TableCell sx={{ color: '#fff', fontWeight: 700 }}>Type</TableCell>
+                                    <TableCell sx={{ color: '#fff', fontWeight: 700 }}>Status</TableCell>
+                                    <TableCell sx={{ color: '#fff', fontWeight: 700 }}>Data</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {sentRequests.map((req) => (
-                                    <TableRow key={req.id}>
-                                        <TableCell>{req.userEmail}</TableCell>
+                                    <TableRow key={req.id} sx={{ '&:hover': { background: '#e8f4f7' } }}>
+                                        <TableCell sx={{ fontWeight: 600 }}>{req.userEmail}</TableCell>
                                         <TableCell>{req.document?.documentName}</TableCell>
                                         <TableCell>
-                                            <Chip label={req.accessType} size="small" variant="outlined" />
+                                            <Chip label={req.accessType} size="small" variant="outlined" sx={{ borderColor: accentColor, color: accentColor }} />
                                         </TableCell>
                                         <TableCell>
                                             <Chip 
                                                 label={req.status} 
                                                 color={req.status === 'APPROVED' ? 'success' : req.status === 'PENDING' ? 'warning' : 'error'}
                                                 size="small"
+                                                sx={{ fontWeight: 600 }}
                                             />
                                         </TableCell>
                                         <TableCell>
                                             {req.status === 'APPROVED' ? (
                                                 (req.accessType === 'ZKP_AGE' || req.accessType === 'ZKP') ? (
                                                     <Button 
-                                                        size="small" variant="contained" color="success"
+                                                        size="small" variant="contained" sx={{ background: cardGradient }}
                                                         onClick={() => {
                                                             setViewProofData(req.proofData);
                                                             setIsProofModalOpen(true);
@@ -588,6 +636,7 @@ function VerifierDashboard() {
                                                         size="small" 
                                                         variant="outlined"
                                                         startIcon={<VisibilityIcon />}
+                                                        sx={{ borderColor: accentColor, color: accentColor }}
                                                         onClick={() => handleViewDocument(req)}
                                                     >
                                                         View Doc
@@ -607,8 +656,6 @@ function VerifierDashboard() {
         )}
       </Card>
 
-      {/* --- MODALS --- */}
-      
       <RequestAccessModal 
          isOpen={isModalOpen}
          onClose={() => {

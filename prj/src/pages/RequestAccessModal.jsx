@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import './RequestAccessModal.css';
 
+const cardGradient = 'linear-gradient(135deg, #1a3f4a 0%, #2d5a63 50%, #3d7a8f 100%)';
+const accentColor = '#438b98';
+
 const RequestAccessModal = ({ isOpen, onClose, document, verifierEmail, userEmail }) => {
   const [accessType, setAccessType] = useState('FULL');
   const [selectedFields, setSelectedFields] = useState([]);
