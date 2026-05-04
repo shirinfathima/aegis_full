@@ -2,7 +2,6 @@ Flask==2.3.2
 flask-cors
 tensorflow==2.15.0
 deepface==0.0.83
-numpy==1.26.4
-ml_dtypes==0.2.0
+numpy==1.23.5
 werkzeug
 opencv-python-headless==4.8.1.78
