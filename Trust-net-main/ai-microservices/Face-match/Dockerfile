@@ -1,21 +1,26 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 
-# Install system dependencies
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
+
 RUN apt-get update && apt-get install -y \
-    libgl1 \
+    tesseract-ocr \
+    libtesseract-dev \
+    libgl1-mesa-glx \
     libglib2.0-0 \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY . .
-
-# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Force correct OpenCV
-RUN pip uninstall -y opencv-python && \
-    pip install opencv-python-headless==4.8.1.78
+RUN python -c "from deepface import DeepFace; DeepFace.build_model('Facenet512')"
+
+COPY . .
 
 EXPOSE 8080
 
