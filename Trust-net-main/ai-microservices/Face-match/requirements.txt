@@ -1,5 +1,6 @@
 Flask==2.3.2
+flask-cors
 deepface==0.0.83
 tensorflow==2.15.0
-opencv-python
-flask-cors
+opencv-python-headless
+werkzeug
