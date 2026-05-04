@@ -3,10 +3,10 @@ nixPkgs = ["python311", "libGL", "glib"]
 
 [phases.install]
 cmds = [
-  "pip install opencv-python-headless==4.8.1.78",
-  "pip install deepface==0.0.83 tensorflow==2.15.0 Flask==2.3.2 flask-cors werkzeug",
-  "pip uninstall -y opencv-python || true",
-  "pip install opencv-python-headless==4.8.1.78 --force-reinstall"
+  "python3 -m pip install opencv-python-headless==4.8.1.78",
+  "python3 -m pip install deepface==0.0.83 tensorflow==2.15.0 Flask==2.3.2 flask-cors werkzeug",
+  "python3 -m pip uninstall -y opencv-python || true",
+  "python3 -m pip install opencv-python-headless==4.8.1.78 --force-reinstall"
 ]
 
 [start]
