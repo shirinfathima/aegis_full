@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { AccessTime, CheckCircle, Cancel, Security, Visibility } from '@mui/icons-material';
 
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 const IncomingRequests = ({ userEmail }) => {
   const [requests, setRequests] = useState([]);
   const [durations, setDurations] = useState({}); 
@@ -18,7 +19,7 @@ const IncomingRequests = ({ userEmail }) => {
   const fetchRequests = async () => {
     const password = sessionStorage.getItem('temp_pass');
     try {
-      const response = await fetch(`http://localhost:8080/api/user/requests?email=${userEmail}`, {
+      const response = await fetch(`${API_BASE}/api/user/requests?email=${userEmail}`, {
         headers: { 'Authorization': 'Basic ' + btoa(`${userEmail}:${password}`) }
       });
       if (response.ok) {
@@ -114,7 +115,7 @@ const IncomingRequests = ({ userEmail }) => {
           const isZKP = request.accessType === 'ZKP_AGE' || request.accessType === 'ZKP';
           
           if (isZKP) {
-            const zkpRes = await fetch(`http://localhost:8080/api/user/generate-student-proof?documentId=${request.document?.id}`, {
+            const zkpRes = await fetch(`${API_BASE}/api/user/generate-student-proof?documentId=${request.document?.id}`, {
                 method: 'POST',
                 headers: { 'Authorization': 'Basic ' + btoa(`${userEmail}:${password}`) }
             });
@@ -140,7 +141,7 @@ const IncomingRequests = ({ userEmail }) => {
         generatedProof: proofData 
       };
 
-      await fetch('http://localhost:8080/api/user/respond-request', {
+      await fetch(`${API_BASE}/api/user/respond-request`, {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',

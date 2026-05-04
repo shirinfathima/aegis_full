@@ -32,7 +32,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import { getCurrentUser, logout, getStoredPassword } from '../services/authService';
 
 const cardGradient = 'linear-gradient(135deg, #1a3f4a 0%, #2d5a63 50%, #3d7a8f 100%)';
-
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 function UserDashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -69,7 +69,7 @@ function UserDashboard() {
       }
 
       try {
-        const response = await fetch('http://localhost:8080/api/documents/my-documents', {
+        const response = await fetch(`${API_BASE}/api/documents/my-documents`, {
           headers: {
             'Authorization': 'Basic ' + btoa(`${currentUser.email}:${storedPassword}`)
           }

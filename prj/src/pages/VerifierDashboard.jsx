@@ -29,7 +29,7 @@ import DigitalIDCard from '../components/DigitalIDCard';
 
 const cardGradient = 'linear-gradient(135deg, #1a3f4a 0%, #2d5a63 50%, #3d7a8f 100%)';
 const accentColor = '#438b98';
-
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 function VerifierDashboard() {
   const navigate = useNavigate();
   const [currentUser] = useState(getCurrentUser());
@@ -93,7 +93,7 @@ function VerifierDashboard() {
         return;
     }
     try {
-        const res = await fetch(`http://localhost:8080/api/verifier/fetch-document-content?requestId=${request.id}`, {
+        const res = await fetch(`${API_BASE}/api/verifier/fetch-document-content?requestId=${request.id}`, {
             headers: getAuthHeaders()
         });
 
@@ -126,7 +126,7 @@ function VerifierDashboard() {
   const fetchInbox = async () => {
     if(!currentUser) return;
     try {
-        const res = await fetch(`http://localhost:8080/api/verifier/inbox?verifierEmail=${currentUser.email}`, {
+        const res = await fetch(`${API_BASE}/api/verifier/inbox?verifierEmail=${currentUser.email}`, {
              headers: getAuthHeaders()
         });
         if(res.ok) {
@@ -284,7 +284,7 @@ function VerifierDashboard() {
     setSearchResults([]);
 
     try {
-        const res = await fetch(`http://localhost:8080/api/verifier/search-user?email=${searchEmail}`, {
+        const res = await fetch(`${API_BASE}/api/verifier/search-user?email=${searchEmail}`, {
             headers: getAuthHeaders()
         });
         
@@ -307,7 +307,7 @@ function VerifierDashboard() {
   const fetchSentRequests = async () => {
     if (!currentUser) return;
     try {
-        const res = await fetch(`http://localhost:8080/api/verifier/my-requests?verifierEmail=${currentUser.email}`, {
+        const res = await fetch(`${API_BASE}/api/verifier/my-requests?verifierEmail=${currentUser.email}`, {
              headers: getAuthHeaders()
         });
         if (res.ok) {

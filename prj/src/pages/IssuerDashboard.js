@@ -26,7 +26,7 @@ import { useNavigate } from 'react-router-dom';
 
 const cardGradient = 'linear-gradient(135deg, #1a3f4a 0%, #2d5a63 50%, #3d7a8f 100%)';
 const accentColor = '#438b98';
-
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 function IssuerDashboard() {
   const navigate = useNavigate();
   const [currentUser] = useState(getCurrentUser());
@@ -60,7 +60,7 @@ function IssuerDashboard() {
     const password = getStoredPassword();
     const email = currentUser?.email;
     try {
-      const response = await fetch(`http://localhost:8080/api/issuer/stats`, {
+      const response = await fetch(`${API_BASE}/api/issuer/stats`, {
         headers: { 'Authorization': 'Basic ' + btoa(`${email}:${password}`) }
       });
       if (response.ok) {

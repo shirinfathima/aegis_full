@@ -3,7 +3,7 @@ import './RequestAccessModal.css';
 
 const cardGradient = 'linear-gradient(135deg, #1a3f4a 0%, #2d5a63 50%, #3d7a8f 100%)';
 const accentColor = '#438b98';
-
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 const RequestAccessModal = ({ isOpen, onClose, document, verifierEmail, userEmail }) => {
   const [accessType, setAccessType] = useState('FULL');
   const [selectedFields, setSelectedFields] = useState([]);
@@ -48,7 +48,7 @@ const RequestAccessModal = ({ isOpen, onClose, document, verifierEmail, userEmai
     try {
       await new Promise(resolve => setTimeout(resolve, 800)); // Fake nice delay
 
-      const response = await fetch('http://localhost:8080/api/verifier/request-access', {
+      const response = await fetch(`${API_BASE}/api/verifier/request-access`, {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',

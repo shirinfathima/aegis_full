@@ -13,7 +13,9 @@ import Webcam from 'react-webcam';
 import { uploadIdCard } from '../services/documentService';
 import { getCurrentUser, getStoredPassword } from '../services/authService'; // Added for auth
 
-const API_URL = 'http://localhost:8080/api'; // Added API constant
+const API_URL = process.env.REACT_APP_API_URL 
+  ? `${process.env.REACT_APP_API_URL}/api` 
+  : 'http://localhost:8080/api';
 const steps = ['Upload ID Documents', 'Liveness Check', 'Verifying'];
 const cardGradient = 'linear-gradient(135deg, #0f2027 0%, #438b98 45%, #2c5364 100%)';
 

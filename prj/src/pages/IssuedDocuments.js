@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, getStoredPassword } from '../services/authService';
 import QRCode from 'react-qr-code';
 
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 // ─────────────────────────────────────────────
 // IMPROVED DIGITAL ID CARD  (larger, flippable)
 // ─────────────────────────────────────────────
@@ -222,14 +223,14 @@ function IssuedDocuments() {
     if (!currentUser || !storedPassword) { setError("Session expired."); setIsLoading(false); return; }
 
     try {
-      const r = await fetch('http://localhost:8080/api/documents/my-documents', {
+      const r = await fetch(`${API_BASE}/api/documents/my-documents`, {
         headers: { 'Authorization': 'Basic ' + btoa(`${currentUser.email}:${storedPassword}`) }
       });
       if (!r.ok) throw new Error(`Status: ${r.status}`);
       const data = await r.json();
       setDocuments(data.filter(d => d.status === 'APPROVED' && d.verifiableCredential));
 
-      const vr = await fetch('http://localhost:8080/api/user/verifiers', {
+      const vr = await fetch(`${API_BASE}/api/user/verifiers`, {
         headers: { 'Authorization': 'Basic ' + btoa(`${currentUser.email}:${storedPassword}`) }
       });
       if (vr.ok) setVerifiers(await vr.json());
@@ -264,7 +265,7 @@ function IssuedDocuments() {
 
       if (disclosureType === 'zkp') {
         const r = await fetch(
-          `http://localhost:8080/api/user/generate-student-proof?documentId=${selectedDocument.id}`,
+          `${API_BASE}/api/user/generate-student-proof?documentId=${selectedDocument.id}`,
           { method:'POST', headers:{ 'Authorization':'Basic ' + btoa(`${currentUser.email}:${password}`) } }
         );
         if (!r.ok) throw new Error(await r.text() || "ZKP failed");
@@ -324,7 +325,7 @@ function IssuedDocuments() {
                        : disclosureType === 'zkp'      ? 'ENROLLMENT_CHECK_ONLY'
                        : 'ALL';
     try {
-      const r = await fetch('http://localhost:8080/api/verifier/submit-proof', {
+      const r = await fetch(`${API_BASE}/api/verifier/submit-proof`, {
         method:'POST',
         headers:{ 'Content-Type':'application/json', 'Authorization':'Basic ' + btoa(`${currentUser.email}:${password}`) },
         body: JSON.stringify({

@@ -1,4 +1,6 @@
-const API_URL = 'http://localhost:8080/api/user';
+const API_URL = process.env.REACT_APP_API_URL 
+  ? `${process.env.REACT_APP_API_URL}/api/user` 
+  : 'http://localhost:8080/api/user';
 
 // Volatile store for the decrypted master key (simulates a client-side digital wallet)
 // NOTE: Reverting removal of password storage to support existing HTTP Basic Auth
