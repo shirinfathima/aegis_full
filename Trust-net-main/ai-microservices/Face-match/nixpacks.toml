@@ -1,5 +1,13 @@
 [phases.setup]
 nixPkgs = ["python311", "libGL", "glib"]
 
+[phases.install]
+cmds = [
+  "pip install opencv-python-headless==4.8.1.78",
+  "pip install deepface==0.0.83 tensorflow==2.15.0 Flask==2.3.2 flask-cors werkzeug",
+  "pip uninstall -y opencv-python || true",
+  "pip install opencv-python-headless==4.8.1.78 --force-reinstall"
+]
+
 [start]
-cmd = "LD_LIBRARY_PATH=/root/.nix-profile/lib:$LD_LIBRARY_PATH python app.py"
+cmd = "python app.py"
