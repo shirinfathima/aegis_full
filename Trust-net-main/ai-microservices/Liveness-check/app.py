@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 # Configuration: URL of the Face-Match microservice
 # Based on your setup, Face-match is running on port 5001
-FACE_MATCH_SERVICE_URL = "http://localhost:5001/face-match"
+FACE_MATCH_SERVICE_URL = os.environ.get("FACE_MATCH_URL", "http://localhost:5001/face-match")
 
 @app.route('/liveness-check', methods=['POST'])
 def liveness_check():
@@ -68,5 +68,5 @@ def home():
     return "Liveness Coordination Service is running (Headless Mode)."
 
 if __name__ == '__main__':
-    # Run on port 5002 as configured previously
-    app.run(port=5002, debug=True)
+    port = int(os.environ.get("PORT", 5002))
+    app.run(host="0.0.0.0", port=port, debug=False)
