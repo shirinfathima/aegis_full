@@ -14,7 +14,6 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/zkp")
-@CrossOrigin(origins = "http://localhost:3000")
 public class ZkpController {
 
     @Autowired

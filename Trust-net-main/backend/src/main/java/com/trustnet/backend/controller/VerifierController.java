@@ -23,7 +23,6 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/verifier")
-@CrossOrigin(origins = "http://localhost:3000")
 public class VerifierController {
 
     @Autowired private UserRepository userRepository;
