@@ -57,6 +57,8 @@ public class UploadService {
     private String pinataSecretApiKey;
     @Value("${pinata.dedicated-gateway}")
     private String dedicatedGateway;
+    @Value("${ai.service.url}")
+    private String aiServiceUrl;
 
     // --- 1. DOWNLOAD FROM DEDICATED GATEWAY ---
     public byte[] downloadFromIpfs(String cid) {
@@ -241,7 +243,7 @@ public class UploadService {
         byte[] fileBytes = Files.readAllBytes(docPath);
         return webClientBuilder.build()
                 .post()
-                .uri("http://localhost:5000/ocr")
+                .uri(aiServiceUrl + "/ocr")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData("file", new ByteArrayResource(fileBytes) {
                     @Override public String getFilename() { return imageSide + ".jpg"; }
@@ -265,7 +267,7 @@ public class UploadService {
 
         String response = webClientBuilder.build()
                 .post()
-                .uri("http://localhost:5002/liveness-check")
+                .uri(aiServiceUrl + "/liveness-check")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(body))
                 .retrieve()
