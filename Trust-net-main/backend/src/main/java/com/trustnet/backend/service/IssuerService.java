@@ -10,6 +10,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.*;
+import org.springframework.beans.factory.annotation.Value;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -47,8 +48,8 @@ public class IssuerService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private final String NODE_ZKP_URL = "http://localhost:3001/generate-commitment";
-
+    @Value("${zkp.service.url}")
+    private String zkpServiceUrl;
     /**
      * SHA256 helper for anchoring VC hash
      */
@@ -113,7 +114,7 @@ public class IssuerService {
                 headers.setContentType(MediaType.APPLICATION_JSON);
                 HttpEntity<String> request = new HttpEntity<>(payload.toString(), headers);
 
-                ResponseEntity<String> response = restTemplate.postForEntity(NODE_ZKP_URL, request, String.class);
+                ResponseEntity<String> response = restTemplate.postForEntity(zkpServiceUrl + "/generate-commitment", request, String.class);
 
                 if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                     throw new RuntimeException("Node.js Commitment Service failed.");

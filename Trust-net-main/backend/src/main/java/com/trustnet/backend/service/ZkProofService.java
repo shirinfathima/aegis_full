@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.*;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.math.BigInteger;
 import java.time.Instant;
@@ -26,7 +27,8 @@ public class ZkProofService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private final String NODE_ZKP_URL = "http://localhost:3001";
+    @Value("${zkp.service.url}")
+    private String zkpServiceUrl;
 
     // 🔥 BN254 field prime (VERY IMPORTANT)
     private static final BigInteger FIELD_PRIME = new BigInteger(
@@ -80,7 +82,7 @@ public class ZkProofService {
             payload.put("secret", secret);
 
             ResponseEntity<JsonNode> response = restTemplate.postForEntity(
-                    NODE_ZKP_URL + "/generate-commitment",
+                    zkpServiceUrl + "/generate-commitment",
                     payload,
                     JsonNode.class
             );
@@ -162,7 +164,7 @@ public class ZkProofService {
         HttpEntity<String> request = new HttpEntity<>(payload.toString(), headers);
 
         ResponseEntity<String> response = restTemplate.postForEntity(
-                NODE_ZKP_URL + "/generate-proof",
+                zkpServiceUrl + "/generate-proof",
                 request,
                 String.class
         );

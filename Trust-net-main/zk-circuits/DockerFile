@@ -1,0 +1,15 @@
+FROM node:18-slim
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY student_verification_js/ ./student_verification_js/
+COPY student_final.zkey ./student_final.zkey
+COPY verification_key.json ./verification_key.json
+COPY server.js ./server.js
+
+EXPOSE 3001
+
+CMD ["node", "server.js"]
