@@ -63,7 +63,8 @@ public class BlockchainService {
                 : privateKey;
 
         this.credentials = Credentials.create(cleanedKey);
-
+        System.out.println("Backend wallet: " + credentials.getAddress());
+        
         RawTransactionManager txManager =
                 new RawTransactionManager(web3j, credentials, chainId);
 
