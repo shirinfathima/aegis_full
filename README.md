@@ -39,13 +39,13 @@ AegisID is a **privacy-preserving digital identity verification platform** that 
 
 ## 🏗️ Architecture
 
-![AegisID Architecture](docs/architecture.jpg)
+![AegisID Architecture](architecture.jpg)
 
 ---
 
 ## 🔄 Verification Workflow
 
-![AegisID Verification Workflow](docs/workflow.jpg)
+![AegisID Verification Workflow](workflow.jpg)
 
 ---
 
